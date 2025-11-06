@@ -5,6 +5,10 @@ Le projet RaceTyper est un jeu de compétition d'écriture en temps réel conçu
 
 Chaque participant utilise un Raspberry Pi  comme console de jeu, et l'architecture est orchestrée par le protocole léger MQTT pour une communication asynchrone et distribuée.
 
+### Gestion du Kubernetes
+
+![Shémas architecture KUBE](image.png)
+
 
 ### ✅ Respect des Contraintes Techniques (SAE BUT 3)
 

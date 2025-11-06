@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]  # Le serveur ASGI qui fait tourner FastAPI
+websockets         # Verifie que la BDD est good
+
+SQLAlchemy #Gestion de la BDD
+numpy # Pour la futur IA 
