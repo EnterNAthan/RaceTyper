@@ -1,0 +1,10 @@
+/venv
+2-ServerArbiter/__pycache__/
+2-ServerArbiter/*.pyc
+2-ServerArbiter/.venv
+
+# Ignore Docker files
+2-ServerArbiter/Dockerfile
+2-ServerArbiter/docker-compose.yml
+
+
