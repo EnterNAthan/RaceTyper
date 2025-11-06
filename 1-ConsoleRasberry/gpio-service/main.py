@@ -1,8 +1,9 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-# Simulation mode - set to True when running on Raspberry Pi
+# Simulation mode - will be set to True if RPi.GPIO is available
 IS_RASPBERRY = False
 
 # Try to import RPi.GPIO, if not available, we're in simulation mode
@@ -17,19 +18,35 @@ except (ImportError, RuntimeError):
 LED_PIN = 17
 SIREN_PIN = 18
 
-# Initialize GPIO if running on Raspberry Pi
-if IS_RASPBERRY:
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setwarnings(False)
-    GPIO.setup(LED_PIN, GPIO.OUT)
-    GPIO.setup(SIREN_PIN, GPIO.OUT)
-    # Initialize pins to LOW
-    GPIO.output(LED_PIN, GPIO.LOW)
-    GPIO.output(SIREN_PIN, GPIO.LOW)
-    print("GPIO pins initialized successfully")
 
-# Initialize FastAPI application
-app = FastAPI(title="RaceTyper GPIO Service", version="1.0.0")
+# Lifespan context manager for startup and shutdown
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize GPIO if running on Raspberry Pi
+    if IS_RASPBERRY:
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        GPIO.setup(LED_PIN, GPIO.OUT)
+        GPIO.setup(SIREN_PIN, GPIO.OUT)
+        # Initialize pins to LOW
+        GPIO.output(LED_PIN, GPIO.LOW)
+        GPIO.output(SIREN_PIN, GPIO.LOW)
+        print("GPIO pins initialized successfully")
+    
+    yield
+    
+    # Shutdown: Cleanup GPIO pins
+    if IS_RASPBERRY:
+        GPIO.cleanup()
+        print("GPIO cleanup completed")
+
+
+# Initialize FastAPI application with lifespan
+app = FastAPI(
+    title="RaceTyper GPIO Service",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # Configure CORS middleware to allow requests from the React frontend
 app.add_middleware(
@@ -100,15 +117,6 @@ async def siren_off():
         print("SIMULATION: SIREN OFF")
     
     return {"status": "success", "action": "siren_off"}
-
-
-# Cleanup function for GPIO
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup GPIO pins on shutdown"""
-    if IS_RASPBERRY:
-        GPIO.cleanup()
-        print("GPIO cleanup completed")
 
 
 # Run the application

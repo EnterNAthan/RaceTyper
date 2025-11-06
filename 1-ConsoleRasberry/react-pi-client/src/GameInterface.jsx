@@ -20,10 +20,15 @@ function GameInterface() {
           'Content-Type': 'application/json',
         },
       });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
       console.log('GPIO action result:', data);
     } catch (error) {
-      console.error('Error triggering GPIO:', error);
+      console.error(`Error triggering GPIO action '${action}':`, error.message);
     }
   };
 
