@@ -5,10 +5,13 @@ import GameStats from './components/GameStats';
 import { useTypingGame } from './hooks/useTypingGame';
 import { useArcadeEffects } from './hooks/useArcadeEffects';
 import { useWordFeedback } from './hooks/useWordFeedback';
+import { useGlobalTyping } from './hooks/useGlobalTyping';
+import { useKioskMode } from './hooks/useKioskMode';
 
 const App: React.FC = () => {
     useArcadeEffects();
     const { showGood, showBad, count } = useWordFeedback();
+    const { isFullscreen, enterFullscreen } = useKioskMode();
     const {
         targetPhrase,
         userInput,
@@ -20,7 +23,11 @@ const App: React.FC = () => {
         startGame,
         isGameActive,
         isCompleted,
+        wordsCompleted,
     } = useTypingGame();
+
+    // Capture keyboard input globally so user doesn't need to focus the field
+    useGlobalTyping({ isGameActive, isCompleted, userInput, handleInputChange });
 
     return (
                 <div className="app dark">
@@ -29,7 +36,13 @@ const App: React.FC = () => {
                         <div className="top-progress">
                             <ProgressBar progress={progress} />
                         </div>
-                        <button className="btn primary" onClick={startGame}>{isGameActive ? 'Restart' : 'Start'}</button>
+                        <button
+                            className="btn primary"
+                            onClick={async () => { await enterFullscreen(); startGame(); }}
+                            title={isFullscreen ? 'Fullscreen actif' : 'Activer le mode kiosque'}
+                        >
+                            {isGameActive ? 'Restart' : 'Start'}
+                        </button>
                     </header>
                     <main className="app-main">
                         {showGood && (
@@ -52,10 +65,15 @@ const App: React.FC = () => {
                             </div>
                         )}
                         <section className="typing-card">
-                            <TypingPhrase targetPhrase={targetPhrase} userInput={userInput} />
+                            <TypingPhrase targetPhrase={targetPhrase} userInput={userInput} wordsCompleted={wordsCompleted} isCompleted={isCompleted} />
                         </section>
                         <section className="input-wrapper">
-                            <TypingInput value={userInput} onChange={handleInputChange} disabled={isCompleted || !isGameActive} />
+                            <TypingInput 
+                                value={userInput} 
+                                onChange={handleInputChange} 
+                                disabled={isCompleted || !isGameActive} 
+                                visuallyHidden={isGameActive} 
+                            />
                         </section>
                         <section className="stats-card">
                             <GameStats 
