@@ -27,7 +27,7 @@ const App: React.FC = () => {
     } = useTypingGame();
 
     // Capture keyboard input globally so user doesn't need to focus the field
-    useGlobalTyping({ isGameActive, isCompleted, userInput, handleInputChange });
+    useGlobalTyping({ isGameActive, isCompleted, userInput, targetPhrase, wordsCompleted, handleInputChange });
 
     return (
                 <div className="app dark">
@@ -64,9 +64,11 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                         )}
-                        <section className="typing-card">
-                            <TypingPhrase targetPhrase={targetPhrase} userInput={userInput} wordsCompleted={wordsCompleted} isCompleted={isCompleted} />
-                        </section>
+                        {!isCompleted && (
+                            <section className="typing-card">
+                                <TypingPhrase targetPhrase={targetPhrase} userInput={userInput} wordsCompleted={wordsCompleted} isCompleted={isCompleted} />
+                            </section>
+                        )}
                         <section className="input-wrapper">
                             <TypingInput 
                                 value={userInput} 

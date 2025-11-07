@@ -4,6 +4,8 @@ type GlobalTypingOptions = {
   isGameActive: boolean;
   isCompleted: boolean;
   userInput: string;
+  targetPhrase: string;
+  wordsCompleted: number;
   handleInputChange: (next: string) => void;
 };
 
@@ -11,7 +13,7 @@ type GlobalTypingOptions = {
  * Listens to window keydown events and forwards printable chars, space and backspace
  * to the game's input handler, so the user doesn't need to focus the text field.
  */
-export function useGlobalTyping({ isGameActive, isCompleted, userInput, handleInputChange }: GlobalTypingOptions) {
+export function useGlobalTyping({ isGameActive, isCompleted, userInput, targetPhrase, wordsCompleted, handleInputChange }: GlobalTypingOptions) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!isGameActive || isCompleted) return;
@@ -30,12 +32,19 @@ export function useGlobalTyping({ isGameActive, isCompleted, userInput, handleIn
 
       let next: string | null = null;
 
+      // Compute locked prefix length from target phrase and wordsCompleted
+      const cleanTarget = targetPhrase
+        .replace(/\^([^\s]+)\^/g, '$1')
+        .replace(/&([^\s]+)&/g, '$1');
+      const targetWords = cleanTarget.split(/\s+/);
+      const lockedPrefixLength = wordsCompleted > 0 ? targetWords.slice(0, wordsCompleted).join(' ').length + 1 : 0;
+
       // Handle backspace
       if (e.key === 'Backspace') {
-        if (userInput.length > 0) {
+        if (userInput.length > lockedPrefixLength) {
           next = userInput.slice(0, -1);
         } else {
-          next = userInput;
+          next = userInput; // clamp, do nothing if at or before lock
         }
         e.preventDefault();
       }
@@ -59,7 +68,7 @@ export function useGlobalTyping({ isGameActive, isCompleted, userInput, handleIn
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isGameActive, isCompleted, userInput, handleInputChange]);
+  }, [isGameActive, isCompleted, userInput, targetPhrase, wordsCompleted, handleInputChange]);
 }
 
 export default useGlobalTyping;
