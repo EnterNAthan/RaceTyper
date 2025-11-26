@@ -122,7 +122,7 @@ class GameManager:
         """
         log_server("Fin de la manche ! Calcul du classement...")
         
-        # 1. Trier les résultats pour obtenir le classement (le plus rapide en premier)
+        # Trier les résultats pour obtenir le classement (le plus rapide en premier)
         # item[0] = client_id, item[1] = data (résumé de la phrase)
         sorted_results = sorted(
             self.current_round_results.items(), 
@@ -131,7 +131,7 @@ class GameManager:
         
         classement_data = []
         
-        # 2. Parcourir le classement pour attribuer les points et les effets
+        # Parcourir le classement pour attribuer les points et les effets
         for i, (client_id, data) in enumerate(sorted_results):
             rank = i + 1
             
@@ -159,12 +159,12 @@ class GameManager:
         })
         
         # Attendre 5 secondes pour que les joueurs voient le classement
-        await asyncio.sleep(5) # <-- Cette ligne a besoin de "import asyncio"
+        await asyncio.sleep(5) 
         
-        # 4. Préparer la manche suivante
+        # Préparer la manche suivante
         self.current_phrase_index += 1
         
-        # 5. Vérifier si le jeu est terminé
+        # Vérifier si le jeu est terminé
         if self.current_phrase_index >= len(self.phrases):
             # JEU TERMINÉ
             log_server("JEU TERMINE !", "INFO")
@@ -173,15 +173,13 @@ class GameManager:
             self.current_phrase_index = 0
             self.scores = {pid: 0 for pid in self.active_players.keys()} # Reset scores
         
-        # 6. Lancer la manche suivante
+        # Lancer la manche suivante
         log_server(f"Lancement de la manche {self.current_phrase_index + 1}")
         self.current_round_results = {} # Vider les résultats pour la nouvelle manche
         new_phrase = self.phrases[self.current_phrase_index]
         await self.broadcast({"type": "new_phrase", "phrase": new_phrase})
 
-
-    # --- Méthodes "Helper" (Aides) ---
-    # (J'ai supprimé calculate_score car le score est maintenant basé sur le classement)
+    # (J'ai supprimé calculate_score car s score est maintenant basé sur le classement)
 
     async def apply_effects(self, client_id, objects):
         """Applique la logique des objets déclenchés."""
