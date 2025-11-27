@@ -50,6 +50,18 @@ export const useTypingGame = () => {
             nextInput = lockedPrefix + nextInput.slice(lockedPrefix.length);
         }
 
+        // Enforce max length of current word: do not allow more letters than target word length
+        const currentIndex = state.wordsCompleted ?? 0;
+        const currentWord = targetWords[currentIndex] || '';
+        const afterLock = nextInput.slice(lockedPrefix.length);
+        // Take characters up to first space as the typed segment for the current word
+        const spacePos = afterLock.indexOf(' ');
+        let typedSegment = spacePos >= 0 ? afterLock.slice(0, spacePos) : afterLock;
+        if (typedSegment.length > currentWord.length) {
+            typedSegment = typedSegment.slice(0, currentWord.length);
+            nextInput = lockedPrefix + typedSegment; // drop any extra pasted content beyond the limit
+        }
+
         // Visual feedback on wrong letter but do not block typing
         const prev = state.userInput;
         if (nextInput.length > prev.length) {

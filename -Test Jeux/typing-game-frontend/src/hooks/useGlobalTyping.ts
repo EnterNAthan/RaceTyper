@@ -57,6 +57,17 @@ export function useGlobalTyping({ isGameActive, isCompleted, userInput, targetPh
 
       // Printable characters (single-char keys)
       else if (e.key && e.key.length === 1) {
+        // Enforce current word max length
+        const currentIndex = wordsCompleted || 0;
+        const afterLock = userInput.slice(lockedPrefixLength);
+        const spacePos = afterLock.indexOf(' ');
+        const typedSegment = spacePos >= 0 ? afterLock.slice(0, spacePos) : afterLock;
+        const currentWord = targetWords[currentIndex] || '';
+        if (typedSegment.length >= currentWord.length) {
+          // block extra characters beyond current word length
+          e.preventDefault();
+          return;
+        }
         next = userInput + e.key;
         // do not prevent default to allow potential sound shortcuts, but it's fine either way
       }
