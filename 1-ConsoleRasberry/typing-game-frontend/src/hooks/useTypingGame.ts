@@ -3,7 +3,7 @@ import { TypingGameState } from '../types/game';
 
 export const useTypingGame = () => {
     const [state, setState] = useState<TypingGameState>({
-        targetPhrase: "The quick ^brown^ fox &jumps& over the lazy dog",
+        targetPhrase: "Comme y a eu Gainsbourg et Gainsbarre Y a le Renaud et le Renard Le Renaud ne boit que de l'eau Le Renard carbure au Ricard Un coté blanc, un coté noir Personne n'est tout moche ou tout beau Moitié ange et moitié salaud Et c'est ce que nous allons voiry dog",
         userInput: "",
         progress: 0,
         attempts: 0,
