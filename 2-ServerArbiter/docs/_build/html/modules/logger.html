@@ -1,0 +1,197 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>logger — Logging console &mdash; RaceTyper — Server Arbitre 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="ObjectManager — Bonus / Malus" href="objectmanager.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            RaceTyper — Server Arbitre
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="app.html">app — Point d’entrée FastAPI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gamemanager.html">GameManager — Cerveau du jeu</a></li>
+<li class="toctree-l1"><a class="reference internal" href="objectmanager.html">ObjectManager — Bonus / Malus</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">logger — Logging console</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#server_app.logger.bcolors"><code class="docutils literal notranslate"><span class="pre">bcolors</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#server_app.logger.bcolors.BOLD"><code class="docutils literal notranslate"><span class="pre">bcolors.BOLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#server_app.logger.bcolors.ENDC"><code class="docutils literal notranslate"><span class="pre">bcolors.ENDC</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#server_app.logger.bcolors.FAIL"><code class="docutils literal notranslate"><span class="pre">bcolors.FAIL</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#server_app.logger.bcolors.HEADER"><code class="docutils literal notranslate"><span class="pre">bcolors.HEADER</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#server_app.logger.bcolors.OKBLUE"><code class="docutils literal notranslate"><span class="pre">bcolors.OKBLUE</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#server_app.logger.bcolors.OKGREEN"><code class="docutils literal notranslate"><span class="pre">bcolors.OKGREEN</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#server_app.logger.bcolors.WARNING"><code class="docutils literal notranslate"><span class="pre">bcolors.WARNING</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#server_app.logger.log_server"><code class="docutils literal notranslate"><span class="pre">log_server()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#server_app.logger.log_websocket"><code class="docutils literal notranslate"><span class="pre">log_websocket()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">RaceTyper — Server Arbitre</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">logger — Logging console</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/modules/logger.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-server_app.logger">
+<span id="logger-logging-console"></span><h1>logger — Logging console<a class="headerlink" href="#module-server_app.logger" title="Link to this heading"></a></h1>
+<p>Logging coloré en console pour le serveur arbitre.</p>
+<p>Fournit deux fonctions principales : une pour les échanges WebSocket,
+une pour les messages internes du serveur.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="server_app.logger.bcolors">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">server_app.logger.</span></span><span class="sig-name descname"><span class="pre">bcolors</span></span><a class="reference internal" href="../_modules/server_app/logger.html#bcolors"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#server_app.logger.bcolors" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Codes ANSI pour la coloration des messages en terminal.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="server_app.logger.bcolors.BOLD">
+<span class="sig-name descname"><span class="pre">BOLD</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'\x1b[1m'</span></span><a class="headerlink" href="#server_app.logger.bcolors.BOLD" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="server_app.logger.bcolors.ENDC">
+<span class="sig-name descname"><span class="pre">ENDC</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'\x1b[0m'</span></span><a class="headerlink" href="#server_app.logger.bcolors.ENDC" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="server_app.logger.bcolors.FAIL">
+<span class="sig-name descname"><span class="pre">FAIL</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'\x1b[91m'</span></span><a class="headerlink" href="#server_app.logger.bcolors.FAIL" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="server_app.logger.bcolors.HEADER">
+<span class="sig-name descname"><span class="pre">HEADER</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'\x1b[95m'</span></span><a class="headerlink" href="#server_app.logger.bcolors.HEADER" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="server_app.logger.bcolors.OKBLUE">
+<span class="sig-name descname"><span class="pre">OKBLUE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'\x1b[94m'</span></span><a class="headerlink" href="#server_app.logger.bcolors.OKBLUE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="server_app.logger.bcolors.OKGREEN">
+<span class="sig-name descname"><span class="pre">OKGREEN</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'\x1b[92m'</span></span><a class="headerlink" href="#server_app.logger.bcolors.OKGREEN" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="server_app.logger.bcolors.WARNING">
+<span class="sig-name descname"><span class="pre">WARNING</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'\x1b[93m'</span></span><a class="headerlink" href="#server_app.logger.bcolors.WARNING" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="server_app.logger.log_server">
+<span class="sig-prename descclassname"><span class="pre">server_app.logger.</span></span><span class="sig-name descname"><span class="pre">log_server</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'INFO'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../_modules/server_app/logger.html#log_server"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#server_app.logger.log_server" title="Link to this definition"></a></dt>
+<dd><p>Formate et affiche un message interne du serveur en console.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>message</strong> – Texte du message à afficher.</p></li>
+<li><p><strong>level</strong> – Niveau de sévérité — ‘INFO’, ‘DEBUG’ ou ‘ERROR’.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="server_app.logger.log_websocket">
+<span class="sig-prename descclassname"><span class="pre">server_app.logger.</span></span><span class="sig-name descname"><span class="pre">log_websocket</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">client_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">direction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">message</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../_modules/server_app/logger.html#log_websocket"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#server_app.logger.log_websocket" title="Link to this definition"></a></dt>
+<dd><p>Formate et affiche un échange WebSocket en console.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>client_id</strong> – Identifiant du client concerné (ex. ‘pi-1’, ‘TOUS’).</p></li>
+<li><p><strong>direction</strong> – ‘IN’ (client → serveur) ou ‘OUT’ (serveur → client).</p></li>
+<li><p><strong>message</strong> – Dictionnaire JSON du message échangé.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="objectmanager.html" class="btn btn-neutral float-left" title="ObjectManager — Bonus / Malus" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Équipe RaceTyper.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
