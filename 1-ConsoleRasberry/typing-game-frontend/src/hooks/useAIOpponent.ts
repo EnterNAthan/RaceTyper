@@ -5,7 +5,6 @@ type AIDifficulty = 'beginner' | 'intermediate' | 'expert' | 'impossible'| 'debi
 
 interface DifficultySettings {
   name: string;
-  emoji: string;
   typingDelay: number;    // ms per character (lower = faster)
   errorRate: number;      // 0-1 probability of making an error
   description: string;
@@ -13,39 +12,34 @@ interface DifficultySettings {
 
 const DIFFICULTY_SETTINGS: Record<AIDifficulty, DifficultySettings> = {
   beginner: {
-    name: 'Débutant',
-    emoji: '🐌',
+    name: 'Beginner',
     typingDelay: 400,
     errorRate: 0.20,
-    description: 'Tape lentement avec quelques erreurs'
+    description: 'Slow with some errors'
   },
   intermediate: {
-    name: 'Intermédiaire', 
-    emoji: '🚶',
+    name: 'Intermediate', 
     typingDelay: 150,
     errorRate: 0.08,
-    description: 'Vitesse normale, assez précis'
+    description: 'Normal speed, fairly precise'
   },
   expert: {
     name: 'Expert',
-    emoji: '🏃',
     typingDelay: 80,
     errorRate: 0.05,
-    description: 'Rapide et précis'
+    description: 'Fast and precise'
   },
   impossible: {
     name: 'Impossible',
-    emoji: '🚀',
     typingDelay: 40,
     errorRate: 0.02,
-    description: 'Vitesse surhumaine!'
+    description: 'Superhuman speed'
   },
   debile: {
-    name: 'débile',
-    emoji: '🤓',
+    name: 'Training',
     typingDelay: 80,
     errorRate: 0.70,
-    description: 'Vitesse surhumaine!'
+    description: 'Fast but inaccurate'
   }
 };
 
@@ -66,6 +60,7 @@ export function useAIOpponent({ targetPhrase, isGameActive, isCompleted, aiEnabl
   const [aiInput, setAiInput] = useState('');
   const [aiProgress, setAiProgress] = useState(0);
   const [aiErrors, setAiErrors] = useState(0); // Track errors made by AI
+  const [aiCompleted, setAiCompleted] = useState(false); // Track if AI finished
   const [startTime, setStartTime] = useState<number | null>(null);
   const cursorRef = useRef(0);
   const runningRef = useRef(false);
@@ -92,6 +87,7 @@ export function useAIOpponent({ targetPhrase, isGameActive, isCompleted, aiEnabl
       cursorRef.current = 0;
       setAiProgress(0);
       setAiErrors(0); // Reset error count
+      setAiCompleted(false); // Reset completion status
       setStartTime(null);
       runningRef.current = false;
       return;
@@ -114,7 +110,10 @@ export function useAIOpponent({ targetPhrase, isGameActive, isCompleted, aiEnabl
       if (cancelled || !runningRef.current) return;
       const chars = targetRef.current.split('');
       if (cursorRef.current >= chars.length) {
+        // AI has completed!
         runningRef.current = false;
+        setAiCompleted(true);
+        setAiProgress(100);
         return;
       }
 
@@ -198,7 +197,7 @@ export function useAIOpponent({ targetPhrase, isGameActive, isCompleted, aiEnabl
     };
   }, [aiEnabled, isGameActive, isCompleted, difficulty]);
 
-  return { aiInput, aiProgress, aiErrors, difficultySettings, aiWPM: calculateWPM() };
+  return { aiInput, aiProgress, aiErrors, aiCompleted, difficultySettings, aiWPM: calculateWPM() };
 }
 
 export { DIFFICULTY_SETTINGS };
