@@ -1,8 +1,15 @@
+"""Logging coloré en console pour le serveur arbitre.
+
+Fournit deux fonctions principales : une pour les échanges WebSocket,
+une pour les messages internes du serveur.
+"""
+
 import datetime
 
-# --- Définition des couleurs ANSI pour la console ---
-# (Ne fonctionne pas toujours sur tous les terminaux, mais super sur la plupart)
+
 class bcolors:
+    """Codes ANSI pour la coloration des messages en terminal."""
+
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
     OKGREEN = '\033[92m'
@@ -11,14 +18,19 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
 
-def _get_time():
-    """Helper pour obtenir un timestamp formaté."""
+
+def _get_time() -> str:
+    """Retourne un timestamp formaté HH:MM:SS.mmm."""
     return datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
-def log_websocket(client_id: str, direction: str, message: dict):
-    """
-    Formate un message WebSocket pour le debug.
-    direction: "IN" (du client au serveur) ou "OUT" (du serveur au client)
+
+def log_websocket(client_id: str, direction: str, message: dict) -> None:
+    """Formate et affiche un échange WebSocket en console.
+
+    Args:
+        client_id: Identifiant du client concerné (ex. 'pi-1', 'TOUS').
+        direction: 'IN' (client → serveur) ou 'OUT' (serveur → client).
+        message: Dictionnaire JSON du message échangé.
     """
     time = _get_time()
     
@@ -33,9 +45,12 @@ def log_websocket(client_id: str, direction: str, message: dict):
         
     print(f"{bcolors.BOLD}[WS {time}]{color} {dir_arrow} [{client_id}] {bcolors.ENDC} {message}")
 
-def log_server(message: str, level: str = "INFO"):
-    """
-    Formate un message interne du serveur (logique de jeu).
+def log_server(message: str, level: str = "INFO") -> None:
+    """Formate et affiche un message interne du serveur en console.
+
+    Args:
+        message: Texte du message à afficher.
+        level: Niveau de sévérité — 'INFO', 'DEBUG' ou 'ERROR'.
     """
     time = _get_time()
     

@@ -1,9 +1,19 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { TypingGameState } from '../types/game';
 
-export const useTypingGame = () => {
+interface UseTypingGameProps {
+    targetPhrase?: string;
+    onPhraseComplete?: (stats: {
+        timeTaken: number;
+        errorsCount: number;
+        bonus: string[];
+        malus: string[];
+    }) => void;
+}
+
+export const useTypingGame = ({ targetPhrase = "", onPhraseComplete }: UseTypingGameProps = {}) => {
     const [state, setState] = useState<TypingGameState>({
-        targetPhrase: "Comme y a eu Gainsbourg et Gainsbarre Y a le Renaud et le Renard Le Renaud ne boit que de l'eau Le Renard carbure au Ricard Un coté blanc, un coté noir Personne n'est tout moche ou tout beau Moitié ange et moitié salaud Et c'est ce que nous allons voiry dog",
+        targetPhrase: targetPhrase,
         userInput: "",
         progress: 0,
         attempts: 0,
@@ -13,6 +23,31 @@ export const useTypingGame = () => {
         startTime: null,
         wordsCompleted: 0,
     });
+
+    const [errorsCount, setErrorsCount] = useState(0);
+    const [bonusWords, setBonusWords] = useState<string[]>([]);
+    const [malusWords, setMalusWords] = useState<string[]>([]);
+
+    // Update state when targetPhrase prop changes
+    useEffect(() => {
+        if (targetPhrase) {
+            setState(prev => ({
+                ...prev,
+                targetPhrase: targetPhrase,
+            }));
+        }
+    }, [targetPhrase]);
+
+    // Extract bonus and malus words from phrase
+    useEffect(() => {
+        if (state.targetPhrase) {
+            const bonusMatches = state.targetPhrase.match(/\^([^\^]+)\^/g);
+            const malusMatches = state.targetPhrase.match(/&([^&]+)&/g);
+
+            setBonusWords(bonusMatches ? bonusMatches.map(m => m.replace(/[\^]/g, '')) : []);
+            setMalusWords(malusMatches ? malusMatches.map(m => m.replace(/[&]/g, '')) : []);
+        }
+    }, [state.targetPhrase]);
 
     const calculateAccuracy = useCallback((target: string, input: string): number => {
         if (input.length === 0) return 100;
@@ -75,6 +110,7 @@ export const useTypingGame = () => {
                 const targetWords2 = cleanTarget.split(/\s+/);
                 if (idx >= 0 && completedWords[idx] !== targetWords2[idx]) {
                     // Reject this space: do not move to the next word and show validation error
+                    setErrorsCount(prev => prev + 1);
                     window.dispatchEvent(new Event('word-invalid'));
                     return;
                 }
@@ -95,7 +131,18 @@ export const useTypingGame = () => {
 
         // Check if game is completed
         if (nextInput === cleanTarget) {
-            setState(prev => ({ ...prev, isGameActive: false, isCompleted: true }));
+            const finalTime = state.startTime ? (Date.now() - state.startTime) / 1000 : 0;
+            setState(prev => ({ ...prev, isGameActive: false, isCompleted: true, timeTaken: finalTime }));
+
+            // Call completion callback with stats
+            if (onPhraseComplete) {
+                onPhraseComplete({
+                    timeTaken: finalTime,
+                    errorsCount: errorsCount,
+                    bonus: bonusWords,
+                    malus: malusWords,
+                });
+            }
         }
 
         // Detect word completion only on insertion of a space (avoid firing on deletions)
@@ -111,10 +158,11 @@ export const useTypingGame = () => {
                 window.dispatchEvent(new Event('word-correct'));
             }
         }
-    }, [state.isGameActive, state.targetPhrase, state.startTime, state.wordsCompleted, calculateAccuracy]);
+    }, [state.isGameActive, state.targetPhrase, state.startTime, state.wordsCompleted, state.userInput, calculateAccuracy, onPhraseComplete, errorsCount, bonusWords, malusWords]);
 
     const startGame = useCallback(() => {
         // Start a new game using the current targetPhrase
+        setErrorsCount(0);
         setState(prev => ({
             ...prev,
             userInput: "",
