@@ -1,10 +1,3 @@
 {
-  // Définit l'interpréteur Python de l'espace de travail pour éviter des chemins relatifs Unix/WSL incorrects
-  "python.defaultInterpreterPath": "C:\\Users\\carquein\\Documents\\_Ecole\\IOT\\SAE\\RaceTyper\\2-ServerArbiter\\venv\\Scripts\\python.exe",
-  // Optionnel : activer l'activation automatique du venv dans le terminal intégré
-  "python.terminal.activateEnvironment": true,
-  "python.analysis.extraPaths": [
-    "./src",
-    "./2-ServerArbiter/server_app"
-  ]
+    "git.ignoreLimitWarning": true
 }
