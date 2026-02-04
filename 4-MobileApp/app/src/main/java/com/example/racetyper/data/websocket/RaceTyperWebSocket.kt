@@ -95,9 +95,7 @@ class RaceTyperWebSocket {
             val type = json.get("type")?.asString ?: return
 
             when (type) {
-                "connection_accepted" -> {
-                    // Connection confirmed
-                }
+                "connection_accepted" -> {}
 
                 "player_update" -> {
                     val scoresJson = json.getAsJsonObject("scores")
@@ -188,7 +186,7 @@ class RaceTyperWebSocket {
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            // Log error silently
         }
     }
 

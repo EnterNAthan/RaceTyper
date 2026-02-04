@@ -1,6 +1,7 @@
 package com.example.racetyper.ui.components
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +14,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -35,22 +35,24 @@ fun PlayerCard(
     modifier: Modifier = Modifier
 ) {
     val rankColor = when (rank) {
-        1 -> Color(0xFFFFD700) // Gold
-        2 -> Color(0xFFC0C0C0) // Silver
+        1 -> Color(0xFFFFD700) // Or
+        2 -> Color(0xFFC0C0C0) // Argent
         3 -> Color(0xFFCD7F32) // Bronze
-        else -> MaterialTheme.colorScheme.surfaceVariant
+        else -> Color.Gray       // Gris pour les autres
     }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp), // Arrondi un peu plus moderne
         colors = CardDefaults.cardColors(
-            containerColor = if (rank <= 3) rankColor.copy(alpha = 0.15f)
-            else MaterialTheme.colorScheme.surface
+            // Fond sombre semi-transparent (Glassmorphism) pour aller avec le fond néon
+            containerColor = Color(0xFF252538).copy(alpha = 0.6f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        // Petite bordure lumineuse pour le Top 3, sinon transparente
+        border = BorderStroke(1.dp, if (rank <= 3) rankColor.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.05f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp) // On gère la profondeur avec la couleur, pas l'ombre
     ) {
         Row(
             modifier = Modifier
@@ -60,30 +62,31 @@ fun PlayerCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Rank badge
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .clip(CircleShape)
-                        .background(rankColor),
+                        // Fond du badge légèrement transparent
+                        .background(if (rank <= 3) rankColor.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f)),
                     contentAlignment = Alignment.Center
                 ) {
                     if (rank <= 3) {
                         Icon(
                             imageVector = Icons.Default.EmojiEvents,
                             contentDescription = "Rank $rank",
-                            tint = Color.White,
+                            tint = rankColor, // L'icone prend la couleur vive
                             modifier = Modifier.size(24.dp)
                         )
                     } else {
                         Text(
                             text = "#$rank",
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Color.White // Texte blanc pour lisibilité
                         )
                     }
                 }
@@ -93,13 +96,14 @@ fun PlayerCard(
                     Text(
                         text = player.clientId,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White // Nom en blanc
                     )
                     if (player.isConnected) {
                         Text(
                             text = "En ligne",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF4CAF50)
+                            color = Color(0xFF00E676) // Vert néon
                         )
                     }
                 }
@@ -110,13 +114,13 @@ fun PlayerCard(
                 Text(
                     text = "${player.score}",
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    fontWeight = FontWeight.Black, // Très gras pour le score
+                    color = MaterialTheme.colorScheme.primary // Violet (Ta couleur préférée)
                 )
                 Text(
                     text = "points",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
                 )
             }
         }
@@ -133,7 +137,7 @@ fun PlayerCardCompact(
         1 -> Color(0xFFFFD700)
         2 -> Color(0xFFC0C0C0)
         3 -> Color(0xFFCD7F32)
-        else -> MaterialTheme.colorScheme.surfaceVariant
+        else -> Color.Gray
     }
 
     Row(
@@ -144,33 +148,35 @@ fun PlayerCardCompact(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
                     .size(28.dp)
                     .clip(CircleShape)
-                    .background(rankColor),
+                    .background(if (rank <= 3) rankColor else Color.White.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "$rank",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (rank <= 3) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                    // Si c'est le top 3 (fond coloré) texte noir/foncé, sinon blanc
+                    color = if (rank <= 3) Color.Black else Color.White
                 )
             }
             Text(
                 text = player.clientId,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White // Nom en blanc pour le scoreboard
             )
         }
         Text(
             text = "${player.score} pts",
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary // Violet
         )
     }
 }

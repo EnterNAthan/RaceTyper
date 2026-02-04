@@ -1,6 +1,9 @@
 package com.example.racetyper.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,19 +11,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -29,11 +33,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.racetyper.data.model.GameStatus
 import com.example.racetyper.data.websocket.ConnectionState
-import com.example.racetyper.ui.components.ConnectionStatus
+import com.example.racetyper.ui.components.GameBackground
+import com.example.racetyper.ui.components.ModernGameCard
 import com.example.racetyper.ui.components.ScoreBoard
 import com.example.racetyper.ui.viewmodel.GameViewModel
 
@@ -47,180 +51,147 @@ fun HomeScreen(
     val gameState by viewModel.gameState.collectAsState()
     val serverUrl by viewModel.serverUrl.collectAsState()
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    GameBackground(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp)
+                .padding(top = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Column {
-                Text(
-                    text = "RaceTyper",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Course de frappe en temps reel",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            ConnectionStatus(connectionState = connectionState)
-        }
-
-        // Connection Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Column {
                     Text(
-                        text = "Serveur: $serverUrl",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = "RaceTyper",
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
                     )
-                    IconButton(onClick = {
-                        if (connectionState is ConnectionState.Connected) {
-                            viewModel.disconnect()
-                        } else {
-                            viewModel.connect()
+                    Text(
+                        text = "Ready to race?",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                ConnectionBadge(connectionState)
+            }
+
+            ModernGameCard(
+                title = "Live Status",
+                icon = Icons.Default.Bolt,
+                accentColor = if (gameState.status == GameStatus.PLAYING) Color(0xFF00E676) else MaterialTheme.colorScheme.primary
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(
+                        text = when (gameState.status) {
+                            GameStatus.WAITING -> "EN ATTENTE"
+                            GameStatus.PLAYING -> "COURSE EN COURS"
+                            GameStatus.PAUSED -> "PAUSE"
+                            GameStatus.FINISHED -> "TERMINE"
+                        },
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+
+                    if (gameState.currentPhrase.isNotEmpty()) {
+                        Surface(
+                            color = Color.Black.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = gameState.currentPhrase.replace("^^", "").replace("&", ""),
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(16.dp),
+                                color = Color.LightGray,
+                                fontFamily = MaterialTheme.typography.bodyLarge.fontFamily
+                            )
                         }
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Reconnecter"
-                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        StatItem(label = "Joueurs", value = "${gameState.players.size}")
+                        StatItem(label = "Manche", value = "${gameState.currentRound}/${gameState.totalRounds}")
                     }
                 }
+            }
 
-                when (connectionState) {
-                    is ConnectionState.Disconnected -> {
+            if (connectionState !is ConnectionState.Connected) {
+                ModernGameCard(title = "Serveur", icon = Icons.Default.Refresh) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = serverUrl, color = Color.Gray)
                         Button(
                             onClick = { viewModel.connect() },
-                            modifier = Modifier.fillMaxWidth()
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null)
-                            Text("  Se connecter")
+                            Text("Connecter")
                         }
                     }
-                    is ConnectionState.Error -> {
-                        Text(
-                            text = "Erreur: ${(connectionState as ConnectionState.Error).message}",
-                            color = Color.Red,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        OutlinedButton(
-                            onClick = { viewModel.connect() },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Reessayer")
-                        }
-                    }
-                    else -> {}
                 }
             }
-        }
 
-        // Game Status Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Etat de la partie",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+            ModernGameCard(title = "Leaderboard", icon = null) {
+                ScoreBoard(
+                    players = gameState.players.values.toList(),
+                    showTitle = false,
+                    maxDisplay = 3
                 )
-
-                val statusText = when (gameState.status) {
-                    GameStatus.WAITING -> "En attente"
-                    GameStatus.PLAYING -> "En cours"
-                    GameStatus.PAUSED -> "En pause"
-                    GameStatus.FINISHED -> "Terminee"
-                }
-
-                val statusColor = when (gameState.status) {
-                    GameStatus.WAITING -> Color.Gray
-                    GameStatus.PLAYING -> Color(0xFF4CAF50)
-                    GameStatus.PAUSED -> Color(0xFFFFC107)
-                    GameStatus.FINISHED -> Color(0xFF2196F3)
-                }
-
-                Row(
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = onNavigateToRankings,
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
                 ) {
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = statusColor
-                    )
-                    Text(
-                        text = "Manche ${gameState.currentRound + 1}/${gameState.totalRounds}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("Voir tout le classement")
                 }
-
-                if (gameState.currentPhrase.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Phrase actuelle:",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = gameState.currentPhrase
-                            .replace("^^", "")
-                            .replace("&", ""),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                Text(
-                    text = "${gameState.players.size} joueur(s) connecte(s)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
+    }
+}
 
-        // Mini Scoreboard
-        ScoreBoard(
-            players = gameState.players.values.toList(),
-            title = "Top 3",
-            maxDisplay = 3
-        )
+@Composable
+fun StatItem(label: String, value: String) {
+    Column {
+        Text(text = value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+    }
+}
 
-        // View full rankings button
-        OutlinedButton(
-            onClick = onNavigateToRankings,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Voir le classement complet")
+@Composable
+fun ConnectionBadge(state: ConnectionState) {
+    val color = when (state) {
+        is ConnectionState.Connected -> Color(0xFF00E676)
+        is ConnectionState.Connecting -> Color(0xFFFFC107)
+        else -> Color(0xFFFF5252)
+    }
+    Surface(
+        color = color.copy(alpha = 0.1f),
+        shape = RoundedCornerShape(50),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(6.dp).background(color, CircleShape))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = if (state is ConnectionState.Connected) "LIVE" else "OFF",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
         }
     }
 }

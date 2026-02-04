@@ -23,7 +23,6 @@ class GameRepository {
         webSocket.disconnect()
     }
 
-    // Mock friends data for demo
     fun getMockFriends(): List<Friend> {
         return listOf(
             Friend(
