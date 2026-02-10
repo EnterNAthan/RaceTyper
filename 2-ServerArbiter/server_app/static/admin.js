@@ -31,6 +31,11 @@ class AdminDashboard {
         this.logsList = document.getElementById('logsList');
         this.autoScrollCheckbox = document.getElementById('autoScrollLogs');
 
+        // WebSocket debug (brut)
+        this.wsInRaw = document.getElementById('wsInRaw');
+        this.wsOutRaw = document.getElementById('wsOutRaw');
+        this.btnClearWsDebug = document.getElementById('btnClearWsDebug');
+
         // Stats
         this.statFinished = document.getElementById('statFinished');
         this.statAvgTime = document.getElementById('statAvgTime');
@@ -82,6 +87,11 @@ class AdminDashboard {
         this.scoreModal.addEventListener('click', (e) => {
             if (e.target === this.scoreModal) this.hideScoreModal();
         });
+
+        // WebSocket debug
+        if (this.btnClearWsDebug) {
+            this.btnClearWsDebug.addEventListener('click', () => this.clearWsDebug());
+        }
     }
 
     // WebSocket Connection
@@ -141,6 +151,8 @@ class AdminDashboard {
     onMessage(event) {
         try {
             const data = JSON.parse(event.data);
+            // Affiche le JSON brut pour debug
+            this.appendRawWebSocket('in', data);
             this.handleServerMessage(data);
         } catch (error) {
             console.error('Error parsing message:', error);
@@ -153,6 +165,23 @@ class AdminDashboard {
         switch (data.type) {
             case 'state_update':
                 this.updateGameState(data);
+
+                // Mettre à jour aussi la liste des joueurs et des phrases
+                if (data.players !== undefined) {
+                    this.updatePlayers(data.players, data.scores);
+                }
+                if (data.phrases !== undefined) {
+                    const currentIndex = data.current_phrase_index ?? data.current_index;
+                    this.updatePhrasesList(data.phrases, currentIndex);
+                }
+
+                // Mettre à jour le classement en fonction des scores reçus
+                if (data.scores !== undefined) {
+                    const ranking = Object.entries(data.scores)
+                        .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+                        .map(([client_id, score]) => ({ client_id, score }));
+                    this.updateRanking(ranking);
+                }
                 break;
             case 'players_update':
                 this.updatePlayers(data.players, data.scores);
@@ -177,6 +206,8 @@ class AdminDashboard {
     sendCommand(command, params = {}) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             const message = { command, ...params };
+            // Affiche le JSON brut pour debug
+            this.appendRawWebSocket('out', message);
             this.ws.send(JSON.stringify(message));
             this.addLog(`→ ${command}`, 'ws-out');
         } else {
@@ -327,9 +358,43 @@ class AdminDashboard {
         }
     }
 
+    // WebSocket raw debug helper
+    appendRawWebSocket(direction, payload) {
+        const target = direction === 'in' ? this.wsInRaw : this.wsOutRaw;
+        if (!target) return;
+
+        const timestamp = new Date().toLocaleTimeString('fr-FR', {
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+
+        let serialized;
+        try {
+            serialized = JSON.stringify(payload, null, 2);
+        } catch (e) {
+            serialized = String(payload);
+        }
+
+        const line = `[${timestamp}] ${serialized}\n\n`;
+        target.textContent += line;
+        target.scrollTop = target.scrollHeight;
+
+        // Garde la zone lisible en limitant la taille du buffer
+        if (target.textContent.length > 20000) {
+            target.textContent = target.textContent.slice(-20000);
+        }
+    }
+
     clearLogs() {
         this.logsList.innerHTML = '';
         this.addLog('Logs effacés', 'server-info');
+    }
+
+    clearWsDebug() {
+        if (this.wsInRaw) this.wsInRaw.textContent = '';
+        if (this.wsOutRaw) this.wsOutRaw.textContent = '';
     }
 
     // Game Control Actions

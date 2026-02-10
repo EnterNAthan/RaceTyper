@@ -82,8 +82,11 @@ class GameManager:
                 "status": self.game_status
             })
 
-        # Prévenir tout le monde qu'un nouveau joueur est là
+        # Prévenir tous les joueurs qu'un nouveau joueur est là
         await self.broadcast({"type": "player_update", "scores": self.scores})
+
+        # Mettre à jour également le tableau de bord admin
+        await self.notify_admins_state_change()
 
     async def disconnect(self, client_id: str) -> None:
         """Retire un joueur de l'état et notifie les autres.
@@ -99,6 +102,9 @@ class GameManager:
             del self.current_round_results[client_id] # Le retire de la manche en cours
         log_server(f"Joueur {client_id} Déconnecté.", "DEBUG")
         await self.broadcast({"type": "player_update", "scores": self.scores})
+
+        # Mettre à jour le tableau de bord admin
+        await self.notify_admins_state_change()
 
     # --- Méthodes de Communication ---
 
@@ -245,6 +251,9 @@ class GameManager:
         self.current_round_results = {} # Vider les résultats pour la nouvelle manche
         new_phrase = self.phrases[self.current_phrase_index]
         await self.broadcast({"type": "new_phrase", "phrase": new_phrase, "round_number": self.current_phrase_index})
+
+        # Notifier l'interface admin du changement de manche et d'état
+        await self.notify_admins_state_change()
 
     # (J'ai supprimé calculate_score car s score est maintenant basé sur le classement)
 

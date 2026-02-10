@@ -93,6 +93,24 @@
                 <div id="logsList" class="logs-list"></div>
             </section>
 
+            <!-- Section Debug WebSocket brut -->
+            <section class="card ws-debug">
+                <h2>Debug WebSocket (brut)</h2>
+                <div class="ws-debug-actions">
+                    <button id="btnClearWsDebug" class="btn btn-small btn-secondary">Clear WebSocket</button>
+                </div>
+                <div class="ws-debug-grid">
+                    <div class="ws-panel">
+                        <h3>Messages entrants</h3>
+                        <pre id="wsInRaw" class="ws-raw"></pre>
+                    </div>
+                    <div class="ws-panel">
+                        <h3>Messages sortants</h3>
+                        <pre id="wsOutRaw" class="ws-raw"></pre>
+                    </div>
+                </div>
+            </section>
+
             <!-- Section Actions Rapides -->
             <section class="card quick-actions">
                 <h2>Actions Rapides</h2>

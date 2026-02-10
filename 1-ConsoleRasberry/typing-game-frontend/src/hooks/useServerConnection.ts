@@ -206,6 +206,10 @@ export const useServerConnection = ({
 
                 case 'admin_message':
                     console.log('📢 Admin message:', message.message);
+                    // Affiche clairement le message de l'arbitre côté console Raspberry
+                    if (message.message) {
+                        alert(message.message);
+                    }
                     break;
 
                 case 'error':
