@@ -1,0 +1,42 @@
+.typing-game-frontend/src/styles/components.css
+
+/* Styles for the Typing Game components */
+
+.typing-display {
+    font-size: 24px;
+    font-family: 'Courier New', Courier, monospace;
+    margin: 20px 0;
+    padding: 10px;
+    border: 2px solid #ccc;
+    border-radius: 5px;
+    position: relative;
+}
+
+.typing-display .correct {
+    color: green;
+}
+
+.typing-display .incorrect {
+    color: red;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background-color: #e0e0e0;
+    border-radius: 5px;
+    overflow: hidden;
+    margin: 20px 0;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background-color: #76c7c0;
+    transition: width 0.3s ease;
+}
+
+.game-stats {
+    font-size: 18px;
+    margin: 10px 0;
+    color: #333;
+}
