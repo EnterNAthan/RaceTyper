@@ -160,11 +160,12 @@ export const useTypingGame = ({ targetPhrase = "", onPhraseComplete }: UseTyping
         }
     }, [state.isGameActive, state.targetPhrase, state.startTime, state.wordsCompleted, state.userInput, calculateAccuracy, onPhraseComplete, errorsCount, bonusWords, malusWords]);
 
-    const startGame = useCallback(() => {
-        // Start a new game using the current targetPhrase
+    const startGame = useCallback((overridePhrase?: string) => {
+        // Start a new game, optionally with a new phrase (for round transitions)
         setErrorsCount(0);
         setState(prev => ({
             ...prev,
+            targetPhrase: overridePhrase || prev.targetPhrase,
             userInput: "",
             progress: 0,
             attempts: 0,

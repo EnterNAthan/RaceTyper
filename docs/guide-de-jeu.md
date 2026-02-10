@@ -1,38 +1,24 @@
 # RaceTyper - Guide de mise en route
 
-## Prerequis
+## Comment ca marche
 
-| Outil | Version min. | Installation |
-|-------|-------------|--------------|
-| Python | 3.10+ | [python.org](https://www.python.org/) |
-| Node.js | 18+ | [nodejs.org](https://nodejs.org/) |
-| npm | 9+ | inclus avec Node.js |
-
----
-
-## Architecture
+Un seul PC (le "serveur") fait tout tourner. Les Raspberry Pi ou autres appareils
+n'ont besoin que d'un navigateur web - rien a installer dessus.
 
 ```
-Serveur Arbitre (Python/FastAPI)     :8080
-    |
-    |--- WebSocket /ws/{client_id}    <- Consoles joueurs
-    |--- WebSocket /ws/admin-dashboard <- Dashboard admin
-    |--- GET /                         <- Interface admin web
-    |
-Console Raspberry (React/TypeScript) :5173
-    |
-    |--- WebSocket -> Serveur :8080
-    |--- HTTP -> GPIO Service :5001
-    |
-GPIO Service (Python/FastAPI)        :5001
-    |--- Controle LED (GPIO 17)
-    |--- Controle Sirene (GPIO 18)
-    |--- Mode simulation sur PC
+    PC Serveur (ton PC)                     Raspberry Pi / Telephone
+   ┌──────────────────────┐
+   │ Serveur Arbitre :8080 │◄─── WebSocket ───── Navigateur web
+   │ Frontend Vite  :5173  │◄─── HTTP ────────── (ouvre juste l'URL)
+   │ GPIO Service   :5001  │
+   └──────────────────────┘
 ```
 
 ---
 
-## 1. Lancer le Serveur Arbitre
+## Partie 1 : Jouer sur un seul PC (test rapide)
+
+### Etape 1 - Lancer le serveur
 
 ```bash
 cd 2-ServerArbiter
@@ -40,27 +26,11 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Le serveur demarre sur `http://localhost:8080`.
-L'interface admin est accessible directement sur cette URL.
+Tu dois voir : `Uvicorn running on http://0.0.0.0:8080`
 
----
+### Etape 2 - Lancer le frontend
 
-## 2. Lancer le GPIO Service (optionnel)
-
-Necessaire uniquement pour les effets physiques (LED, sirene) sur Raspberry Pi.
-Sur PC, le service tourne en mode simulation (affiche les actions dans la console).
-
-```bash
-cd 1-ConsoleRasberry/gpio-service
-pip install -r requirements.txt
-python main.py
-```
-
-Demarre sur `http://localhost:5001`.
-
----
-
-## 3. Lancer le Frontend (Console joueur)
+Dans un autre terminal :
 
 ```bash
 cd 1-ConsoleRasberry/typing-game-frontend
@@ -68,57 +38,141 @@ npm install
 npm run dev
 ```
 
-Demarre sur `http://localhost:5173` (accessible aussi depuis le reseau local).
+Tu dois voir :
+```
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.x.x:5173/
+```
 
----
+### Etape 3 - Ouvrir les joueurs
 
-## 4. Connecter les joueurs
-
-### Sur un seul PC (plusieurs onglets)
-
-Ouvrir un onglet par joueur :
+Ouvrir dans des onglets differents :
 
 - Joueur 1 : `http://localhost:5173?client=pi-1`
 - Joueur 2 : `http://localhost:5173?client=pi-2`
-- Joueur 3 : `http://localhost:5173?client=pi-3`
 
-Le frontend detecte automatiquement l'IP du serveur (meme machine = ca marche directement).
+### Etape 4 - Lancer la partie
 
-### Sur plusieurs appareils (reseau local)
+Ouvrir l'admin : `http://localhost:8080`
+Cliquer **Start Game**.
 
-Reperer l'IP de la machine qui heberge le serveur et le frontend (ex: `192.168.1.50`).
-
-Sur chaque appareil (Pi, PC, telephone), ouvrir dans le navigateur :
-
-```
-http://192.168.1.50:5173?client=pi-1&server=192.168.1.50:8080
-```
-
-| Parametre URL | Role | Exemple |
-|---------------|------|---------|
-| `client` | Identifiant unique du joueur | `pi-1`, `pi-2`, `joueur-alice` |
-| `server` | Adresse IP:port du serveur arbitre | `192.168.1.50:8080` |
-
-- `client` : si absent, un ID aleatoire est genere
-- `server` : si absent, le frontend se connecte au meme hostname que la page (fonctionne automatiquement si le serveur et le frontend sont sur la meme machine)
-
-Sans parametre `?client=`, un ID aleatoire est genere automatiquement.
+C'est tout. Les 2 onglets recoivent la phrase et on peut jouer.
 
 ---
 
-## 5. Demarrer une partie
+## Partie 2 : Jouer sur plusieurs appareils (reseau local)
 
-1. Ouvrir le **dashboard admin** : `http://IP_SERVEUR:8080` (ou `http://localhost:8080` en local)
-2. Verifier que les joueurs apparaissent dans la liste
-3. Cliquer **Start Game**
-4. Les joueurs recoivent la premiere phrase et commencent a taper
+### Etape 1 - Trouver l'IP de ton PC
+
+Sur Windows, ouvrir un terminal et taper :
+
+```bash
+ipconfig
+```
+
+Chercher la ligne `Adresse IPv4` sous ta connexion WiFi ou Ethernet.
+Exemple : `10.109.150.194` ou `192.168.1.50`
+
+> **Note** : quand tu lances `npm run dev`, Vite affiche aussi l'IP
+> dans la ligne `Network: http://10.109.150.194:5173/`
+
+### Etape 2 - Ouvrir le firewall Windows (ports 5173 et 8080)
+
+C'est **la cause la plus frequente** du "site inaccessible" depuis un autre appareil.
+
+Ouvrir PowerShell **en administrateur** et executer :
+
+```powershell
+netsh advfirewall firewall add rule name="RaceTyper Frontend" dir=in action=allow protocol=TCP localport=5173
+netsh advfirewall firewall add rule name="RaceTyper Server" dir=in action=allow protocol=TCP localport=8080
+```
+
+> Pour supprimer ces regles plus tard :
+> ```powershell
+> netsh advfirewall firewall delete rule name="RaceTyper Frontend"
+> netsh advfirewall firewall delete rule name="RaceTyper Server"
+> ```
+
+### Etape 3 - Lancer le serveur et le frontend sur ton PC
+
+Terminal 1 :
+```bash
+cd 2-ServerArbiter
+python run.py
+```
+
+Terminal 2 :
+```bash
+cd 1-ConsoleRasberry/typing-game-frontend
+npm run dev
+```
+
+### Etape 4 - Connecter les appareils
+
+Sur chaque Raspberry Pi (ou telephone, ou autre PC), ouvrir le navigateur
+et aller a cette adresse (remplacer `IP_DU_PC` par ton IP) :
+
+```
+http://IP_DU_PC:5173?client=pi-1&server=IP_DU_PC:8080
+```
+
+Exemple concret avec l'IP `10.109.150.194` :
+
+- Pi 1 : `http://10.109.150.194:5173?client=pi-1&server=10.109.150.194:8080`
+- Pi 2 : `http://10.109.150.194:5173?client=pi-2&server=10.109.150.194:8080`
+- Pi 3 : `http://10.109.150.194:5173?client=pi-3&server=10.109.150.194:8080`
+
+### Etape 5 - Lancer la partie
+
+Ouvrir l'admin depuis n'importe quel appareil : `http://IP_DU_PC:8080`
+Verifier que tous les joueurs apparaissent, puis cliquer **Start Game**.
+
+---
+
+## Parametres URL
+
+| Parametre | Role | Obligatoire ? |
+|-----------|------|---------------|
+| `client`  | Identifiant unique du joueur (ex: `pi-1`) | Non (genere automatiquement si absent) |
+| `server`  | IP:port du serveur arbitre (ex: `192.168.1.50:8080`) | Non si meme machine. **Oui si appareils differents** |
+
+---
+
+## Checklist "site inaccessible"
+
+Si un appareil n'arrive pas a se connecter, verifier dans l'ordre :
+
+1. **Meme reseau WiFi/Ethernet ?** Le Pi et le PC doivent etre sur le meme reseau
+2. **Firewall ouvert ?** Voir etape 2 de la partie multi-appareils
+3. **Bonne IP ?** Verifier avec `ipconfig` (Windows) ou `ip a` (Linux)
+4. **Serveur lance ?** `python run.py` doit tourner dans un terminal
+5. **Frontend lance ?** `npm run dev` doit tourner et afficher `Network: http://...`
+6. **Port dans l'URL ?** Ne pas oublier `:5173` dans l'adresse
+
+Test rapide depuis le Pi : ouvrir `http://IP_DU_PC:5173` dans le navigateur.
+Si la page s'affiche, ca fonctionne.
+
+---
+
+## GPIO Service (optionnel)
+
+Pour les effets physiques (LED, sirene) sur un Raspberry Pi.
+Sur PC, ca tourne en mode simulation (pas besoin de le lancer pour jouer).
+
+```bash
+cd 1-ConsoleRasberry/gpio-service
+pip install -r requirements.txt
+python main.py
+```
+
+Demarre sur port 5001. Le GPIO Service doit tourner sur **chaque Pi** qui a du materiel connecte.
 
 ---
 
 ## Deroulement d'une partie
 
 ```
-1. L'admin demarre la partie
+1. L'admin demarre la partie depuis http://IP:8080
 2. Tous les joueurs recoivent la meme phrase
 3. Chaque joueur tape la phrase mot par mot
    - Mot correct + espace -> passe au mot suivant
@@ -136,7 +190,6 @@ Les phrases contiennent des mots speciaux :
 - `^^mot^^` = **Bonus** : +100 points si tape correctement
 - `&mot&` = **Malus** : envoie un effet a un adversaire aleatoire
 
-Effets malus possibles :
 | Effet | Action |
 |-------|--------|
 | SCREEN_SHAKE | L'ecran tremble pendant 0.5s |
@@ -148,12 +201,14 @@ Effets malus possibles :
 
 ## Commandes admin (dashboard)
 
+Accessible sur `http://IP_DU_PC:8080` depuis n'importe quel appareil.
+
 | Bouton | Action |
 |--------|--------|
 | Start Game | Demarre la partie |
 | Pause | Met en pause |
 | Reset | Reinitialise scores et manche |
-| Next Round | Force le passage a la manche suivante |
+| Next Round | Force le passage a la manche suivante (utile si un joueur est bloque) |
 | End Game | Termine immediatement |
 | Kick | Expulse un joueur |
 
@@ -161,29 +216,8 @@ Effets malus possibles :
 
 ## Ports utilises
 
-| Service | Port | Protocole |
+| Service | Port | Lance sur |
 |---------|------|-----------|
-| Serveur Arbitre | 8080 | HTTP + WebSocket |
-| Frontend React | 5173 | HTTP (Vite dev server) |
-| GPIO Service | 5001 | HTTP REST |
-
----
-
-## Tester sur un seul PC
-
-Tout fonctionne sur un seul PC sans Raspberry Pi :
-- Le GPIO Service tourne en mode simulation (pas besoin de `RPi.GPIO`)
-- Ouvrir plusieurs onglets avec des `?client=` differents simule plusieurs joueurs
-- Les effets malus visuels (screen shake, sleep) fonctionnent dans le navigateur
-- Pas besoin du parametre `?server=` en local (detection automatique)
-
----
-
-## Troubleshooting
-
-| Probleme | Solution |
-|----------|----------|
-| Le joueur ne recoit pas de phrase | Verifier que le serveur tourne sur :8080. Si multi-appareils, ajouter `?server=IP:8080` dans l'URL |
-| La partie ne passe pas a la manche suivante | Tous les joueurs connectes doivent finir. Utiliser "Next Round" dans l'admin pour forcer |
-| Appareil distant ne peut pas se connecter | Verifier que le serveur et le frontend sont accessibles (firewall, meme reseau WiFi) |
-| Le frontend ne compile pas | Verifier `npm install` dans `typing-game-frontend` |
+| Serveur Arbitre | 8080 | PC serveur uniquement |
+| Frontend React | 5173 | PC serveur uniquement |
+| GPIO Service | 5001 | Chaque Pi avec du materiel (optionnel) |

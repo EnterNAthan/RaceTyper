@@ -64,6 +64,10 @@ export const useServerConnection = ({
     const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const reconnectAttempts = useRef(0);
 
+    // Store callbacks in refs to avoid recreating handleMessage/connect on every render
+    const callbacksRef = useRef({ onPhraseReceived, onGameStatusChange, onRoundResults, onGameOver, onMalusBonus });
+    callbacksRef.current = { onPhraseReceived, onGameStatusChange, onRoundResults, onGameOver, onMalusBonus };
+
     // Get or create client ID
     const getClientId = useCallback(() => {
         const params = new URLSearchParams(window.location.search);
@@ -84,10 +88,12 @@ export const useServerConnection = ({
     }, []);
 
     // Handle incoming messages from server
+    // No callback dependencies — reads from callbacksRef to stay stable
     const handleMessage = useCallback((event: MessageEvent) => {
         try {
             const message: ServerMessage = JSON.parse(event.data);
             console.log('📥 Server message:', message);
+            const cbs = callbacksRef.current;
 
             switch (message.type) {
                 case 'connection_accepted':
@@ -107,8 +113,8 @@ export const useServerConnection = ({
                         gameStatus: 'playing',
                         currentRound: message.round_number ?? prev.currentRound,
                     }));
-                    onPhraseReceived?.(message.phrase);
-                    onGameStatusChange?.('playing');
+                    cbs.onPhraseReceived?.(message.phrase);
+                    cbs.onGameStatusChange?.('playing');
                     break;
 
                 case 'player_update':
@@ -125,7 +131,7 @@ export const useServerConnection = ({
                 case 'round_wait':
                     console.log('⏳ Round wait');
                     setState(prev => ({ ...prev, gameStatus: 'round_wait' }));
-                    onGameStatusChange?.('round_wait');
+                    cbs.onGameStatusChange?.('round_wait');
                     break;
 
                 case 'round_classement':
@@ -136,8 +142,15 @@ export const useServerConnection = ({
                             score: player.score_added,
                             rank: player.rank,
                         }));
-                        setState(prev => ({ ...prev, players: results, gameStatus: 'round_wait' }));
-                        onRoundResults?.(results);
+                        // Utiliser global_scores pour le scoreboard global
+                        const globalPlayers = message.global_scores
+                            ? Object.entries(message.global_scores).map(([id, score]) => ({
+                                client_id: id,
+                                score: score as number,
+                            }))
+                            : results;
+                        setState(prev => ({ ...prev, players: globalPlayers, gameStatus: 'round_wait' }));
+                        cbs.onRoundResults?.(results);
                     }
                     break;
 
@@ -152,19 +165,47 @@ export const useServerConnection = ({
                             score: score as number,
                             rank: index + 1,
                         }));
-                        onGameOver?.(finalResults);
+                        cbs.onGameOver?.(finalResults);
                     }
-                    onGameStatusChange?.('game_over');
+                    cbs.onGameStatusChange?.('game_over');
                     break;
 
                 case 'hardware_action':
                     console.log('⚡ Hardware action:', message.action);
-                    onMalusBonus?.({ type: 'malus', value: message.action });
+                    cbs.onMalusBonus?.({ type: 'malus', value: message.action });
                     break;
 
                 case 'kicked':
                     console.log('❌ Kicked from game:', message.message);
                     setState(prev => ({ ...prev, connected: false }));
+                    break;
+
+                case 'game_paused':
+                    console.log('⏸️ Game paused');
+                    setState(prev => ({ ...prev, gameStatus: 'paused' }));
+                    cbs.onGameStatusChange?.('paused');
+                    break;
+
+                case 'game_reset':
+                    console.log('🔄 Game reset');
+                    setState(prev => ({
+                        ...prev,
+                        gameStatus: 'waiting',
+                        currentRound: 0,
+                        currentPhrase: '',
+                        players: prev.players.map(p => ({ ...p, score: 0 })),
+                    }));
+                    cbs.onGameStatusChange?.('waiting');
+                    break;
+
+                case 'game_status':
+                    console.log('📊 Game status:', message.status);
+                    setState(prev => ({ ...prev, gameStatus: message.status }));
+                    cbs.onGameStatusChange?.(message.status);
+                    break;
+
+                case 'admin_message':
+                    console.log('📢 Admin message:', message.message);
                     break;
 
                 case 'error':
@@ -177,7 +218,7 @@ export const useServerConnection = ({
         } catch (error) {
             console.error('Error parsing server message:', error);
         }
-    }, [onPhraseReceived, onGameStatusChange, onRoundResults, onGameOver, onMalusBonus]);
+    }, []);
 
     // Connect to WebSocket server
     const connect = useCallback(() => {

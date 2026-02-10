@@ -72,34 +72,9 @@ async def get_scores() -> JSONResponse:
     # Utilise JSONResponse pour un retour propre.
     return JSONResponse(content={"status": "success", "scores": scores})
 
-@app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
-    """Connexion WebSocket persistante pour un joueur (un Pi).
-
-    Args:
-        websocket: Connexion WebSocket fournie par FastAPI.
-        client_id: Identifiant unique du joueur dans l'URL (ex. 'pi-1').
-    """
-    
-    await websocket.accept()
-
-    # On délègue sa gestion au GameManager.
-    await manager.connect(websocket, client_id)
-    
-    try:
-        # Le serveur attend passivement les messages du Pi.
-        while True:
-            # Attend de recevoir un message JSON du Pi
-            data = await websocket.receive_json()
-            # on passe le message au game manager
-            await manager.process_message(client_id, data)
-            
-    except WebSocketDisconnect:
-        # il se déconnecte
-        # On informe le GameManager pour qu'il le nettoie de la liste.
-        await manager.disconnect(client_id)
-
 # ==================== WEBSOCKET ADMIN ====================
+# IMPORTANT: cette route doit etre AVANT /ws/{client_id} sinon
+# "admin-dashboard" est capture comme un client_id de joueur.
 
 @app.websocket("/ws/admin-dashboard")
 async def admin_websocket(websocket: WebSocket) -> None:
@@ -189,3 +164,23 @@ async def admin_websocket(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         await manager.disconnect_admin(websocket)
         log_server("Admin WebSocket déconnecté", "INFO")
+
+# ==================== WEBSOCKET JOUEURS ====================
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
+    """Connexion WebSocket persistante pour un joueur (un Pi).
+
+    Args:
+        websocket: Connexion WebSocket fournie par FastAPI.
+        client_id: Identifiant unique du joueur dans l'URL (ex. 'pi-1').
+    """
+    await websocket.accept()
+    await manager.connect(websocket, client_id)
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            await manager.process_message(client_id, data)
+    except WebSocketDisconnect:
+        await manager.disconnect(client_id)

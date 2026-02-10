@@ -34,11 +34,11 @@ class GameManager:
         self.object_manager = ObjectManager()
 
         self.phrases: list[str] = [
-            "Le rapide renard brun saute par-dessus ^^le chien paresseux^^.",
-            "Jamais deux sans &trois&.",
-            "Ceci est une ^^phrase bonus^^ mais attention au &malus& !",
-            "Que la force soit ^^avec toi^^.",
-            "La nuit porte &conseil&."
+            "Le rapide renard brun saute par-dessus ^le^ ^chien^ ^paresseux^",
+            "Jamais deux sans &trois&",
+            "Ceci est une ^phrase^ ^bonus^ mais attention au &malus&",
+            "Que la force soit ^avec^ ^toi^",
+            "La nuit porte &conseil&"
         ]
 
         self.current_phrase_index: int = 0
@@ -67,14 +67,20 @@ class GameManager:
             "client_id": client_id
         })
 
-        # Envoyer la phrase de la manche ACTUELLE au joueur qui vient de se connecter
-        # (Si la partie a déjà commencé, il rejoint à la manche en cours)
-        current_phrase = self.phrases[self.current_phrase_index]
-        await self.send_to_client(client_id, {
-            "type": "new_phrase",
-            "phrase": current_phrase,
-            "round_number": self.current_phrase_index
-        })
+        # N'envoyer la phrase que si le jeu est en cours (l'admin a démarré)
+        if self.game_status == "playing":
+            current_phrase = self.phrases[self.current_phrase_index]
+            await self.send_to_client(client_id, {
+                "type": "new_phrase",
+                "phrase": current_phrase,
+                "round_number": self.current_phrase_index
+            })
+        else:
+            # Informer le joueur de l'état actuel (waiting, paused, etc.)
+            await self.send_to_client(client_id, {
+                "type": "game_status",
+                "status": self.game_status
+            })
 
         # Prévenir tout le monde qu'un nouveau joueur est là
         await self.broadcast({"type": "player_update", "scores": self.scores})
@@ -411,7 +417,7 @@ class GameManager:
     async def end_game(self) -> None:
         """Termine immédiatement la partie et sauvegarde dans l'historique."""
         log_server("Fin de partie forcée par l'arbitre", "INFO")
-        self.game_status = "finished"
+        self.game_status = "game_over"
 
         # Sauvegarder dans l'historique
         self.game_history.append({

@@ -808,6 +808,150 @@ body.kiosk * {
   animation: screen-shake 120ms ease; 
 }
 
-.app.shake, body.shake { 
-  animation: screen-shake 160ms ease; 
+.app.shake, body.shake {
+  animation: screen-shake 160ms ease;
+}
+
+/* ========== LOBBY ========== */
+.lobby-info {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 32px;
+  margin-top: 32px;
+  text-align: center;
+}
+
+.lobby-info p {
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.lobby-players {
+  margin-top: 24px;
+  text-align: left;
+}
+
+.lobby-players h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+
+.lobby-player {
+  padding: 10px 16px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--panel-border);
+  font-size: 14px;
+}
+
+.lobby-player.self {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+/* ========== SCOREBOARD ========== */
+.scoreboard-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.scoreboard-card h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+
+.scoreboard-entry {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.scoreboard-entry.self {
+  background: var(--primary-light);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.scoreboard-rank {
+  color: var(--text-muted);
+  width: 30px;
+  flex-shrink: 0;
+}
+
+.scoreboard-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scoreboard-score {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ========== MALUS OVERLAYS ========== */
+.siren-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 1500;
+  animation: siren-flash 0.3s ease infinite alternate;
+}
+
+.siren-overlay span {
+  font-size: 48px;
+  font-weight: 900;
+  color: var(--danger);
+  text-shadow: 0 0 30px var(--danger-glow);
+}
+
+@keyframes siren-flash {
+  from { background: rgba(255, 0, 0, 0.1); }
+  to { background: rgba(255, 0, 0, 0.25); }
+}
+
+.sleep-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 1500;
+  animation: fade-in 200ms ease;
+}
+
+.sleep-box {
+  background: var(--panel);
+  border: 2px solid var(--text-muted);
+  border-radius: 16px;
+  padding: 32px 48px;
+  text-align: center;
+}
+
+.sleep-box span {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
 }

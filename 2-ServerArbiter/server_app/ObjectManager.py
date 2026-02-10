@@ -40,7 +40,7 @@ class ObjectManager:
 
         # 2. Recherche des balises
         malus_match = re.search(r"&(.+?)&", target_word_with_tags)
-        bonus_match = re.search(r"\^\^(.+?)\^\^", target_word_with_tags)
+        bonus_match = re.search(r"\^(.+?)\^", target_word_with_tags)
 
         # 3. Logique Conditionnelle
         if malus_match:
