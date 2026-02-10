@@ -7,9 +7,11 @@ import { useArcadeEffects } from './hooks/useArcadeEffects';
 import { useWordFeedback } from './hooks/useWordFeedback';
 import { useGlobalTyping } from './hooks/useGlobalTyping';
 import { useKioskMode } from './hooks/useKioskMode';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useAIOpponent, { DIFFICULTY_SETTINGS, AIDifficulty } from './hooks/useAIOpponent';
 import { useServerConnection, PlayerData } from './hooks/useServerConnection';
+
+type GameState = 'MENU' | 'COUNTDOWN' | 'PLAYING' | 'WIN' | 'GAMEOVER';
 
 const App: React.FC = () => {
     useArcadeEffects();
@@ -58,10 +60,17 @@ const App: React.FC = () => {
         wordsCompleted,
     } = useTypingGame();
 
-    // AI opponent toggle
+    // Game state management
+    const [gameState, setGameState] = useState<GameState>('MENU');
+    
+    // AI opponent settings
     const [aiEnabled, setAiEnabled] = useState(false);
     const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('intermediate');
-    const { aiInput, aiProgress, aiErrors, difficultySettings, aiWPM } = useAIOpponent({ 
+    
+    // Countdown state
+    const [countdown, setCountdown] = useState<number | null>(null);
+    
+    const { aiInput, aiProgress, aiErrors, aiCompleted, difficultySettings, aiWPM } = useAIOpponent({ 
         targetPhrase, 
         isGameActive, 
         isCompleted, 
@@ -76,11 +85,116 @@ const App: React.FC = () => {
         },
     });
 
-    // Capture keyboard input globally so user doesn't need to focus the field
-    useGlobalTyping({ isGameActive, isCompleted, userInput, targetPhrase, wordsCompleted, handleInputChange });
+    // Check for game completion (win)
+    useEffect(() => {
+        if (isCompleted && gameState === 'PLAYING') {
+            setGameState('WIN');
+        }
+    }, [isCompleted, gameState]);
+
+    // Check if AI completed before player (game over)
+    useEffect(() => {
+        if (aiCompleted && aiEnabled && gameState === 'PLAYING' && !isCompleted) {
+            setGameState('GAMEOVER');
+        }
+    }, [aiCompleted, aiEnabled, isCompleted, gameState]);
+
+    // Countdown effect
+    useEffect(() => {
+        if (gameState === 'COUNTDOWN' && countdown !== null) {
+            if (countdown > 0) {
+                const timer = setTimeout(() => {
+                    setCountdown(countdown - 1);
+                }, 1000);
+                return () => clearTimeout(timer);
+            } else {
+                // Countdown finished, start the game
+                setCountdown(null);
+                setGameState('PLAYING');
+                startGame();
+            }
+        }
+    }, [countdown, gameState, startGame]);
+
+    const handleStartFromMenu = async () => {
+        // Removed fullscreen/kiosk mode to allow mouse cursor
+        setGameState('COUNTDOWN');
+        setCountdown(3);
+    };
+
+    const handleReturnToMenu = () => {
+        setGameState('MENU');
+    };
+
+    // Capture keyboard input globally only when playing
+    useGlobalTyping({ 
+        isGameActive: gameState === 'PLAYING' && isGameActive, 
+        isCompleted, 
+        userInput, 
+        targetPhrase, 
+        wordsCompleted, 
+        handleInputChange 
+    });
 
     return (
-                <div className="app dark">
+        <div className="app dark">
+            {/* MENU SCREEN */}
+            {gameState === 'MENU' && (
+                <div className="menu-screen">
+                    <div className="menu-container">
+                        <h1 className="menu-title">RaceTyper</h1>
+                        <p className="menu-subtitle">Test your typing speed</p>
+                        
+                        <div className="menu-options">
+                            <div className="menu-option">
+                                <label className="menu-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={aiEnabled}
+                                        onChange={(e) => setAiEnabled(e.target.checked)}
+                                        className="menu-checkbox"
+                                    />
+                                    <span>Enable AI Opponent</span>
+                                </label>
+                            </div>
+                            
+                            {aiEnabled && (
+                                <div className="menu-option">
+                                    <label className="menu-label">Difficulty</label>
+                                    <select 
+                                        className="menu-select"
+                                        value={aiDifficulty} 
+                                        onChange={(e) => setAiDifficulty(e.target.value as AIDifficulty)}
+                                    >
+                                        {Object.entries(DIFFICULTY_SETTINGS).map(([key, settings]) => (
+                                            <option key={key} value={key}>
+                                                {settings.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+                        
+                        <button className="btn primary menu-start-btn" onClick={handleStartFromMenu}>
+                            Start Game
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* COUNTDOWN SCREEN */}
+            {gameState === 'COUNTDOWN' && countdown !== null && (
+                <div className="countdown-overlay" aria-live="polite">
+                    <div className="countdown-number">
+                        {countdown === 0 ? 'GO!' : countdown}
+                    </div>
+                </div>
+            )}
+
+            {/* GAME SCREEN */}
+            {gameState === 'PLAYING' && (
+                <>
                     <header className="app-header with-progress">
                         <h1>RaceTyper</h1>
                         {gameStatus === 'playing' && (
@@ -147,7 +261,7 @@ const App: React.FC = () => {
                     <main className="app-main">
                         {showGood && (
                             <div className="good-overlay" aria-live="polite">
-                                <span>GOOD!</span>
+                                <span>Correct</span>
                             </div>
                         )}
                         {showBad && (
@@ -235,56 +349,54 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                         )}
-                        {!isCompleted && (
-                            <>
-                                <section className="typing-card">
-                                    <TypingPhrase targetPhrase={targetPhrase} userInput={userInput} wordsCompleted={wordsCompleted} isCompleted={isCompleted} />
-                                </section>
+                        
+                        <section className="typing-card">
+                            <TypingPhrase targetPhrase={targetPhrase} userInput={userInput} wordsCompleted={wordsCompleted} isCompleted={isCompleted} />
+                        </section>
 
-                                {/* AI opponent display */}
-                                {aiEnabled && (
-                                    <section className="typing-card ai-opponent" aria-label="AI opponent">
-                                        <div className="ai-header">
-                                            {difficultySettings.emoji} Adversaire IA - {difficultySettings.name}
-                                            <div className="ai-stats" style={{fontSize: '12px', marginTop: '4px'}}>
-                                                <span>Progress: {aiProgress.toFixed(1)}%</span>
-                                                <span>WPM: {aiWPM}</span>
-                                                <span>Chars: {aiInput.length}</span>
-                                                <span style={{color: aiErrors > 0 ? '#ff6b6b' : '#666'}}>
-                                                    Erreurs: {aiErrors}
-                                                </span>
-                                            </div>
-                                            <div style={{fontSize: '11px', color: '#888', fontStyle: 'italic'}}>
-                                                {difficultySettings.description}
-                                            </div>
+                        {/* AI opponent display */}
+                        {aiEnabled && (
+                            <section className="typing-card ai-opponent" aria-label="AI opponent">
+                                <div className="ai-header">
+                                    <div className="ai-title">
+                                        <span className="ai-label">Opponent</span>
+                                        <span className="ai-difficulty">{difficultySettings.name}</span>
+                                    </div>
+                                    <div className="ai-metrics">
+                                        <div className="metric">
+                                            <span className="metric-label">Progress</span>
+                                            <span className="metric-value">{aiProgress.toFixed(1)}%</span>
                                         </div>
-                                        <div className="ai-typing">
-                                            <div className="ai-line" style={{
-                                                fontFamily: 'monospace',
-                                                fontSize: '1.1em',
-                                                padding: '8px',
-                                                backgroundColor: 'rgba(0,100,255,0.1)',
-                                                border: '1px solid rgba(0,100,255,0.3)',
-                                                borderRadius: '4px',
-                                                minHeight: '2em',
-                                                wordBreak: 'break-all',
-                                                transition: 'background-color 0.3s ease'
-                                            }}>
-                                                {aiInput || <span style={{color: '#666'}}>IA en attente...</span>}
-                                            </div>
-                                            <div className="ai-progress" style={{marginTop: '8px'}}>
-                                                <ProgressBar progress={aiProgress} />
-                                            </div>
+                                        <div className="metric">
+                                            <span className="metric-label">WPM</span>
+                                            <span className="metric-value">{aiWPM}</span>
                                         </div>
-                                    </section>
-                                )}
-                            </>
+                                        <div className="metric">
+                                            <span className="metric-label">Chars</span>
+                                            <span className="metric-value">{aiInput.length}</span>
+                                        </div>
+                                        <div className="metric">
+                                            <span className="metric-label">Errors</span>
+                                            <span className={`metric-value ${aiErrors > 0 ? 'error' : ''}`}>{aiErrors}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="ai-typing">
+                                    <div className="ai-line">
+                                        {aiInput || <span className="ai-placeholder">Waiting for opponent...</span>}
+                                    </div>
+                                    <div className="ai-progress">
+                                        <ProgressBar progress={aiProgress} />
+                                    </div>
+                                </div>
+                            </section>
                         )}
+                        
                         <section className="input-wrapper">
                             <TypingInput 
                                 value={userInput} 
                                 onChange={handleInputChange} 
-                                disabled={isCompleted || !isGameActive} 
+                                disabled={isCompleted} 
                                 visuallyHidden={isGameActive} 
                             />
                         </section>
@@ -320,7 +432,50 @@ const App: React.FC = () => {
                             </>
                         )}
                     </main>
+                </>
+            )}
+
+            {/* WIN SCREEN */}
+            {gameState === 'WIN' && (
+                <div className="win-overlay" aria-live="polite">
+                    <div className="win-box">
+                        <h2>Complete</h2>
+                        <div className="win-stats">
+                            <div className="win-stat">
+                                <span className="win-stat-label">Time</span>
+                                <span className="win-stat-value">{timeTaken.toFixed(2)}s</span>
+                            </div>
+                            <div className="win-stat">
+                                <span className="win-stat-label">Accuracy</span>
+                                <span className="win-stat-value">{accuracy}%</span>
+                            </div>
+                        </div>
+                        <button className="btn primary" onClick={handleReturnToMenu}>Back to Menu</button>
+                    </div>
                 </div>
+            )}
+            
+            {/* GAME OVER SCREEN */}
+            {gameState === 'GAMEOVER' && (
+                <div className="gameover-overlay" aria-live="polite">
+                    <div className="gameover-box">
+                        <h2>Game Over</h2>
+                        <p className="gameover-message">The opponent finished first!</p>
+                        <div className="gameover-stats">
+                            <div className="gameover-stat">
+                                <span className="gameover-stat-label">Your Progress</span>
+                                <span className="gameover-stat-value">{progress.toFixed(1)}%</span>
+                            </div>
+                            <div className="gameover-stat">
+                                <span className="gameover-stat-label">Opponent</span>
+                                <span className="gameover-stat-value">100%</span>
+                            </div>
+                        </div>
+                        <button className="btn primary" onClick={handleReturnToMenu}>Back to Menu</button>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 };
 

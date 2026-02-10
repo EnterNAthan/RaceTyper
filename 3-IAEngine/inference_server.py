@@ -34,7 +34,7 @@ class PredictResponse(BaseModel):
 
 # Lazy load model on first request
 MODEL = None
-CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZéè '\u00e9\u00e8\u00e0\u00f9\u00e7\u00ea\u00ee\u00f4.,-!"
+CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ 'éèàùçêîô.,-!"
 
 
 def load_model():
