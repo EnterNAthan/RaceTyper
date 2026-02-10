@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import TypingPhrase, { TypingInput } from './components/TypingDisplay';
 import ProgressBar from './components/ProgressBar';
 import GameStats from './components/GameStats';
@@ -7,7 +7,6 @@ import { useArcadeEffects } from './hooks/useArcadeEffects';
 import { useWordFeedback } from './hooks/useWordFeedback';
 import { useGlobalTyping } from './hooks/useGlobalTyping';
 import { useKioskMode } from './hooks/useKioskMode';
-import { useState, useEffect } from 'react';
 import useAIOpponent, { DIFFICULTY_SETTINGS, AIDifficulty } from './hooks/useAIOpponent';
 import { useServerConnection, PlayerData } from './hooks/useServerConnection';
 
@@ -45,7 +44,7 @@ const App: React.FC = () => {
         },
     });
 
-    // Typing game logic
+    // Typing game logic (single hook instance wired to server currentPhrase)
     const {
         targetPhrase,
         userInput,
@@ -58,7 +57,14 @@ const App: React.FC = () => {
         isGameActive,
         isCompleted,
         wordsCompleted,
-    } = useTypingGame();
+    } = useTypingGame({
+        targetPhrase: currentPhrase,
+        onPhraseComplete: (stats) => {
+            // send stats to server when local phrase completed
+            console.log('✅ Phrase completed, sending to server...', stats);
+            sendPhraseComplete(stats.timeTaken, stats.errorsCount, stats.bonus, stats.malus);
+        },
+    });
 
     // Game state management
     const [gameState, setGameState] = useState<GameState>('MENU');
@@ -76,13 +82,6 @@ const App: React.FC = () => {
         isCompleted, 
         aiEnabled, 
         difficulty: aiDifficulty 
-    });
-    } = useTypingGame({
-        targetPhrase: currentPhrase,
-        onPhraseComplete: (stats) => {
-            console.log('✅ Phrase completed, sending to server...', stats);
-            sendPhraseComplete(stats.timeTaken, stats.errorsCount, stats.bonus, stats.malus);
-        },
     });
 
     // Check for game completion (win)
@@ -243,7 +242,7 @@ const App: React.FC = () => {
                             >
                                 {Object.entries(DIFFICULTY_SETTINGS).map(([key, settings]) => (
                                     <option key={key} value={key}>
-                                        {settings.emoji} {settings.name}
+                                        {settings.name}
                                     </option>
                                 ))}
                             </select>
