@@ -1,8 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
-from app import app, manager # Importe votre app FastAPI et l'instance du manager
-from ObjectManager import ObjectManager
-from GameManager import GameManager # <-- CORRECTION 2: Importer la classe pour le typage
+from server_app.app import app, manager
+from server_app.ObjectManager import ObjectManager
+from server_app.GameManager import GameManager
 import asyncio
 
 # --- Fichiers de Test pour Pôle 2 (Serveur Arbitre) ---
@@ -70,15 +70,19 @@ def test_websocket_connection_and_round_logic():
 
     # Simule un client "pi-test" qui se connecte au WebSocket
     with client.websocket_connect("/ws/pi-test") as websocket:
-        
-        # Test de Connexion et Réception de la Première Phrase
-        # Le serveur doit envoyer la première phrase dès la connexion
+
+        # Le serveur envoie 3 messages à la connexion :
+        # 1. connection_accepted
+        data = websocket.receive_json()
+        assert data["type"] == "connection_accepted"
+        assert data["client_id"] == "pi-test"
+
+        # 2. new_phrase
         data = websocket.receive_json()
         assert data["type"] == "new_phrase"
         assert "phrase" in data
-        
-        # Le serveur envoie aussi un "player_update" (broadcast) lors de la connexion.
-        # Nous devons "consommer" ce message avant de continuer le test.
+
+        # 3. player_update (broadcast)
         data = websocket.receive_json()
         assert data["type"] == "player_update"
         assert "scores" in data

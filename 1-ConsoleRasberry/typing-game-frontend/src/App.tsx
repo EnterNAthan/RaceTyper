@@ -407,29 +407,6 @@ const App: React.FC = () => {
                             />
                         </section>
 
-                        {/* Playing state */}
-                        {gameStatus === 'playing' && !isCompleted && (
-                            <>
-                                <section className="typing-card">
-                                    <TypingPhrase targetPhrase={targetPhrase} userInput={userInput} wordsCompleted={wordsCompleted} isCompleted={isCompleted} />
-                                </section>
-                                <section className="input-wrapper">
-                                    <TypingInput
-                                        value={userInput}
-                                        onChange={handleInputChange}
-                                        disabled={isCompleted || !isGameActive}
-                                        visuallyHidden={isGameActive}
-                                    />
-                                </section>
-                                <section className="stats-card">
-                                    <GameStats
-                                        attempts={attempts}
-                                        accuracy={accuracy}
-                                        timeTaken={timeTaken}
-                                    />
-                                </section>
-                            </>
-                        )}
                     </main>
                 </>
             )}

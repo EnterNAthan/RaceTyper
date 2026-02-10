@@ -228,8 +228,12 @@ class GameManager:
             await self.broadcast({"type": "game_over", "final_scores": self.scores})
             # Réinitialiser le jeu
             self.current_phrase_index = 0
+            self.current_round_results = {}
             self.scores = {pid: 0 for pid in self.active_players.keys()} # Reset scores
-        
+            self.game_status = "waiting"
+            await self.notify_admins_state_change()
+            return
+
         # Lancer la manche suivante
         log_server(f"Lancement de la manche {self.current_phrase_index + 1}")
         self.current_round_results = {} # Vider les résultats pour la nouvelle manche

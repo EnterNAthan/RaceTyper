@@ -1,4 +1,7 @@
 # RaceTyper - Jeu de Course d'Écriture Distribuée
+
+> **Guide de mise en route rapide** : voir [docs/guide-de-jeu.md](docs/guide-de-jeu.md)
+
 ## 🎯 Objectif du Projet
 Le projet RaceTyper est un jeu de compétition d'écriture en temps réel conçu pour valider les exigences d'un système distribué et embarqué. Le concept est une course où 3 à 4 joueurs s'affrontent pour taper une phrase le plus rapidement et le plus précisément possible, sous la gestion d'un serveur central intelligent.
 

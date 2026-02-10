@@ -4,7 +4,7 @@ export const calculateAccuracy = (input: string, target: string): number => {
 };
 
 export const getCurrentInputState = (input: string, target: string) => {
-    const currentState = {
+    const currentState: { correct: string[]; incorrect: string[]; remaining: string } = {
         correct: [],
         incorrect: [],
         remaining: target.slice(input.length),

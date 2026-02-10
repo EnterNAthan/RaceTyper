@@ -49,7 +49,7 @@ export const useServerConnection = ({
     });
 
     const wsRef = useRef<WebSocket | null>(null);
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const reconnectAttempts = useRef(0);
 
     // Get or create client ID
@@ -100,11 +100,11 @@ export const useServerConnection = ({
                     break;
 
                 case 'player_update':
-                    console.log('👥 Player update:', message.players);
-                    if (message.players) {
-                        const playerArray = Object.entries(message.players).map(([id, data]: [string, any]) => ({
+                    console.log('👥 Player update:', message.scores);
+                    if (message.scores) {
+                        const playerArray = Object.entries(message.scores).map(([id, score]) => ({
                             client_id: id,
-                            score: data.score || 0,
+                            score: score as number,
                         }));
                         setState(prev => ({ ...prev, players: playerArray }));
                     }
@@ -117,25 +117,27 @@ export const useServerConnection = ({
                     break;
 
                 case 'round_classement':
-                    console.log('🏆 Round results:', message.ranking);
-                    if (message.ranking) {
-                        const results = message.ranking.map((player: any, index: number) => ({
+                    console.log('🏆 Round results:', message.classement);
+                    if (message.classement) {
+                        const results = message.classement.map((player: any) => ({
                             client_id: player.client_id,
-                            score: player.score,
-                            rank: index + 1,
+                            score: player.score_added,
+                            rank: player.rank,
                         }));
-                        setState(prev => ({ ...prev, players: results }));
+                        setState(prev => ({ ...prev, players: results, gameStatus: 'round_wait' }));
                         onRoundResults?.(results);
                     }
                     break;
 
                 case 'game_over':
-                    console.log('🎮 Game over:', message.final_ranking);
+                    console.log('🎮 Game over:', message.final_scores);
                     setState(prev => ({ ...prev, gameStatus: 'game_over' }));
-                    if (message.final_ranking) {
-                        const finalResults = message.final_ranking.map((player: any, index: number) => ({
-                            client_id: player.client_id,
-                            score: player.score,
+                    if (message.final_scores) {
+                        const sorted = Object.entries(message.final_scores)
+                            .sort(([, a], [, b]) => (b as number) - (a as number));
+                        const finalResults = sorted.map(([id, score], index) => ({
+                            client_id: id,
+                            score: score as number,
                             rank: index + 1,
                         }));
                         onGameOver?.(finalResults);
@@ -143,9 +145,9 @@ export const useServerConnection = ({
                     onGameStatusChange?.('game_over');
                     break;
 
-                case 'malus_bonus_event':
-                    console.log('⚡ Malus/Bonus event:', message);
-                    onMalusBonus?.(message);
+                case 'hardware_action':
+                    console.log('⚡ Hardware action:', message.action);
+                    onMalusBonus?.({ type: 'malus', value: message.action });
                     break;
 
                 case 'kicked':
@@ -237,12 +239,16 @@ export const useServerConnection = ({
 
     // Send phrase completion
     const sendPhraseComplete = useCallback((timeTaken: number, errorsCount: number, bonus: any[], malus: any[]) => {
+        const objects_triggered = [
+            ...bonus.map((word: string) => ({ type: 'bonus', word, success: true })),
+            ...malus.map((word: string) => ({ type: 'malus', word, success: true })),
+        ];
         sendMessage({
-            type: 'phrase_complete',
-            time: timeTaken,
+            type: 'phrase_finished',
+            action: 'phrase_finished',
+            time_taken: timeTaken,
             errors: errorsCount,
-            bonus: bonus,
-            malus: malus,
+            objects_triggered,
         });
     }, [sendMessage]);
 
