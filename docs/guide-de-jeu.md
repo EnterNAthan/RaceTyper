@@ -68,17 +68,39 @@ npm install
 npm run dev
 ```
 
-Demarre sur `http://localhost:5173`.
+Demarre sur `http://localhost:5173` (accessible aussi depuis le reseau local).
 
 ---
 
 ## 4. Connecter les joueurs
 
-Ouvrir un onglet navigateur par joueur avec un `client` different dans l'URL :
+### Sur un seul PC (plusieurs onglets)
+
+Ouvrir un onglet par joueur :
 
 - Joueur 1 : `http://localhost:5173?client=pi-1`
 - Joueur 2 : `http://localhost:5173?client=pi-2`
 - Joueur 3 : `http://localhost:5173?client=pi-3`
+
+Le frontend detecte automatiquement l'IP du serveur (meme machine = ca marche directement).
+
+### Sur plusieurs appareils (reseau local)
+
+Reperer l'IP de la machine qui heberge le serveur et le frontend (ex: `192.168.1.50`).
+
+Sur chaque appareil (Pi, PC, telephone), ouvrir dans le navigateur :
+
+```
+http://192.168.1.50:5173?client=pi-1&server=192.168.1.50:8080
+```
+
+| Parametre URL | Role | Exemple |
+|---------------|------|---------|
+| `client` | Identifiant unique du joueur | `pi-1`, `pi-2`, `joueur-alice` |
+| `server` | Adresse IP:port du serveur arbitre | `192.168.1.50:8080` |
+
+- `client` : si absent, un ID aleatoire est genere
+- `server` : si absent, le frontend se connecte au meme hostname que la page (fonctionne automatiquement si le serveur et le frontend sont sur la meme machine)
 
 Sans parametre `?client=`, un ID aleatoire est genere automatiquement.
 
@@ -86,7 +108,7 @@ Sans parametre `?client=`, un ID aleatoire est genere automatiquement.
 
 ## 5. Demarrer une partie
 
-1. Ouvrir le **dashboard admin** : `http://localhost:8080`
+1. Ouvrir le **dashboard admin** : `http://IP_SERVEUR:8080` (ou `http://localhost:8080` en local)
 2. Verifier que les joueurs apparaissent dans la liste
 3. Cliquer **Start Game**
 4. Les joueurs recoivent la premiere phrase et commencent a taper
@@ -153,6 +175,7 @@ Tout fonctionne sur un seul PC sans Raspberry Pi :
 - Le GPIO Service tourne en mode simulation (pas besoin de `RPi.GPIO`)
 - Ouvrir plusieurs onglets avec des `?client=` differents simule plusieurs joueurs
 - Les effets malus visuels (screen shake, sleep) fonctionnent dans le navigateur
+- Pas besoin du parametre `?server=` en local (detection automatique)
 
 ---
 
@@ -160,7 +183,7 @@ Tout fonctionne sur un seul PC sans Raspberry Pi :
 
 | Probleme | Solution |
 |----------|----------|
-| Le joueur ne recoit pas de phrase | Verifier que le serveur tourne sur :8080 et que l'URL WS est correcte |
+| Le joueur ne recoit pas de phrase | Verifier que le serveur tourne sur :8080. Si multi-appareils, ajouter `?server=IP:8080` dans l'URL |
 | La partie ne passe pas a la manche suivante | Tous les joueurs connectes doivent finir. Utiliser "Next Round" dans l'admin pour forcer |
-| Erreur CORS sur les appels REST | Les WebSockets ne sont pas affectes par CORS. Seuls les appels REST `/api/scores` peuvent etre bloques |
+| Appareil distant ne peut pas se connecter | Verifier que le serveur et le frontend sont accessibles (firewall, meme reseau WiFi) |
 | Le frontend ne compile pas | Verifier `npm install` dans `typing-game-frontend` |

@@ -30,14 +30,26 @@ interface UseServerConnectionProps {
     onMalusBonus?: (event: { type: string; value: string }) => void;
 }
 
+// Resolve server URL: ?server=IP:PORT in URL takes priority, then prop, then default
+const getServerUrl = (propUrl?: string): string => {
+    const params = new URLSearchParams(window.location.search);
+    const urlServer = params.get('server');
+    if (urlServer) {
+        // Accept "192.168.1.10:8080" or "ws://192.168.1.10:8080"
+        return urlServer.startsWith('ws') ? urlServer : `ws://${urlServer}`;
+    }
+    return propUrl || `ws://${window.location.hostname}:8080`;
+};
+
 export const useServerConnection = ({
-    serverUrl = 'ws://127.0.0.1:8080',
+    serverUrl,
     onPhraseReceived,
     onGameStatusChange,
     onRoundResults,
     onGameOver,
     onMalusBonus,
 }: UseServerConnectionProps = {}) => {
+    const resolvedServerUrl = getServerUrl(serverUrl);
     const [state, setState] = useState<ServerConnectionState>({
         connected: false,
         clientId: '',
@@ -170,7 +182,7 @@ export const useServerConnection = ({
     // Connect to WebSocket server
     const connect = useCallback(() => {
         const clientId = getClientId();
-        const wsUrl = `${serverUrl}/ws/${clientId}`;
+        const wsUrl = `${resolvedServerUrl}/ws/${clientId}`;
 
         console.log('🔌 Connecting to:', wsUrl);
 
@@ -213,7 +225,7 @@ export const useServerConnection = ({
         } catch (error) {
             console.error('Error creating WebSocket:', error);
         }
-    }, [serverUrl, getClientId, handleMessage]);
+    }, [resolvedServerUrl, getClientId, handleMessage]);
 
     // Disconnect from server
     const disconnect = useCallback(() => {
