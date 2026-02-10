@@ -1,15 +1,23 @@
+"""Gestion des objets spéciaux (Bonus / Malus) dans les phrases.
+
+Détecte les balises ``^^bonus^^`` et ``&malus&`` et fournit les effets
+correspondants au GameManager.
+"""
+
 import re
 import random
 from typing import Optional, Tuple
 
+
 class ObjectManager:
+    """Expert en objets spéciaux — consultée par le GameManager.
+
+    Attributes:
+        bonus_effects (list[str]): Identifiants des effets bonus disponibles.
+        malus_effects (list[str]): Identifiants des effets malus disponibles.
     """
-    Gère la définition et la logique des objets (Bonus/Malus).
-    C'est un "Expert" que le GameManager consulte.
-    """
-    
-    def __init__(self):
-        # Définit les effets possibles
+
+    def __init__(self) -> None:
         self.bonus_effects = ["BOOST_SCORE_100", "BOOST_SCORE_200"]
         self.malus_effects = ["TRIGGER_SIREN", "SCREEN_SHAKE", "SLEEP", "SWAPKEY"] 
     
@@ -51,10 +59,18 @@ class ObjectManager:
             
     # --- Méthodes appelées par le GameManager (Pôle 2) ---
     
-    def get_bonus_effect(self):
-        """Retourne le score d'un bonus simple."""
+    def get_bonus_effect(self) -> int:
+        """Retourne le nombre de points accordés par un bonus.
+
+        Returns:
+            Nombre de points bonus à ajouter au score du joueur.
+        """
         return 100
-        
-    def get_malus_effect(self):
-        """Retourne un type de malus aléatoire à appliquer."""
+
+    def get_malus_effect(self) -> str:
+        """Choisit aléatoirement un effet malus parmi ceux disponibles.
+
+        Returns:
+            Identifiant de l'effet malus (ex. 'TRIGGER_SIREN', 'SCREEN_SHAKE').
+        """
         return random.choice(self.malus_effects)

@@ -1,0 +1,810 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>server_app.GameManager &mdash; RaceTyper — Server Arbitre 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            RaceTyper — Server Arbitre
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../modules/app.html">app — Point d’entrée FastAPI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../modules/gamemanager.html">GameManager — Cerveau du jeu</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../modules/objectmanager.html">ObjectManager — Bonus / Malus</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../modules/logger.html">logger — Logging console</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">RaceTyper — Server Arbitre</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">server_app.GameManager</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for server_app.GameManager</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Cerveau du jeu RaceTyper — gestion de l&#39;état global, des manches,</span>
+<span class="sd">des scores et de la communication en temps réel avec les joueurs</span>
+<span class="sd">et l&#39;interface admin via WebSocket.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.ObjectManager</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObjectManager</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.logger</span><span class="w"> </span><span class="kn">import</span> <span class="n">log_websocket</span><span class="p">,</span> <span class="n">log_server</span>
+
+
+<div class="viewcode-block" id="GameManager">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GameManager</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Gère l&#39;état complet du jeu RaceTyper.</span>
+
+<span class="sd">    Centralise la logique de manche (rounds), le calcul des scores,</span>
+<span class="sd">    les connexions joueurs/admin et les notifications en temps réel.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        active_players (dict[str, WebSocket]): Connexions WebSocket des joueurs actifs.</span>
+<span class="sd">        scores (dict[str, int]): Scores globaux par identifiant de joueur.</span>
+<span class="sd">        object_manager (ObjectManager): Instance de l&#39;expert en bonus/malus.</span>
+<span class="sd">        phrases (list[str]): Liste des phrases utilisées pour les manches.</span>
+<span class="sd">        current_phrase_index (int): Index de la manche en cours dans `phrases`.</span>
+<span class="sd">        current_round_results (dict[str, dict]): Résultats des joueurs pour la manche actuelle.</span>
+<span class="sd">        admin_connections (list[WebSocket]): WebSockets des admins connectés.</span>
+<span class="sd">        game_status (str): État du jeu — &#39;waiting&#39; | &#39;playing&#39; | &#39;paused&#39; | &#39;finished&#39;.</span>
+<span class="sd">        game_history (list[dict]): Historique des parties jouées.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">object_manager</span> <span class="o">=</span> <span class="n">ObjectManager</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="s2">&quot;Le rapide renard brun saute par-dessus ^^le chien paresseux^^.&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Jamais deux sans &amp;trois&amp;.&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Ceci est une ^^phrase bonus^^ mais attention au &amp;malus&amp; !&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;Que la force soit ^^avec toi^^.&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;La nuit porte &amp;conseil&amp;.&quot;</span>
+        <span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">admin_connections</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">game_status</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;waiting&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">game_history</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># --- Gestion des Connexions ---</span>
+
+<div class="viewcode-block" id="GameManager.connect">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.connect">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">connect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">websocket</span><span class="p">,</span> <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enregistre un nouveau joueur et lui envoie l&#39;état courant.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            websocket: Connexion WebSocket du joueur.</span>
+<span class="sd">            client_id: Identifiant unique du joueur (ex. &#39;pi-1&#39;).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">websocket</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Joueur </span><span class="si">{</span><span class="n">client_id</span><span class="si">}</span><span class="s2"> Connecté. Total: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">)</span><span class="si">}</span><span class="s2"> joueurs.&quot;</span><span class="p">,</span> <span class="s2">&quot;DEBUG&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Envoyer d&#39;abord le message de confirmation de connexion</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_to_client</span><span class="p">(</span><span class="n">client_id</span><span class="p">,</span> <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;connection_accepted&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;client_id&quot;</span><span class="p">:</span> <span class="n">client_id</span>
+        <span class="p">})</span>
+
+        <span class="c1"># Envoyer la phrase de la manche ACTUELLE au joueur qui vient de se connecter</span>
+        <span class="c1"># (Si la partie a déjà commencé, il rejoint à la manche en cours)</span>
+        <span class="n">current_phrase</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span><span class="p">]</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_to_client</span><span class="p">(</span><span class="n">client_id</span><span class="p">,</span> <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;new_phrase&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;phrase&quot;</span><span class="p">:</span> <span class="n">current_phrase</span><span class="p">,</span>
+            <span class="s2">&quot;round_number&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span>
+        <span class="p">})</span>
+
+        <span class="c1"># Prévenir tout le monde qu&#39;un nouveau joueur est là</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;player_update&quot;</span><span class="p">,</span> <span class="s2">&quot;scores&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">})</span></div>
+
+
+<div class="viewcode-block" id="GameManager.disconnect">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.disconnect">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">disconnect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retire un joueur de l&#39;état et notifie les autres.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            client_id: Identifiant du joueur déconnecté.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="p">:</span>
+            <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span> <span class="c1"># Le retire de la manche en cours</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Joueur </span><span class="si">{</span><span class="n">client_id</span><span class="si">}</span><span class="s2"> Déconnecté.&quot;</span><span class="p">,</span> <span class="s2">&quot;DEBUG&quot;</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;player_update&quot;</span><span class="p">,</span> <span class="s2">&quot;scores&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">})</span></div>
+
+
+    <span class="c1"># --- Méthodes de Communication ---</span>
+
+<div class="viewcode-block" id="GameManager.broadcast">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.broadcast">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">broadcast</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Envoie un message JSON à tous les joueurs connectés.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            message: Dictionnaire à sérialiser en JSON et envoyer.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Log l&#39;envoi (une seule fois)</span>
+        <span class="n">log_websocket</span><span class="p">(</span><span class="s2">&quot;TOUS&quot;</span><span class="p">,</span> <span class="s2">&quot;OUT&quot;</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+
+        <span class="c1"># Envoyer à tous les joueurs, en ignorant les connexions fermées</span>
+        <span class="n">disconnected</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">client_id</span><span class="p">,</span> <span class="n">ws</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur lors de l&#39;envoi à </span><span class="si">{</span><span class="n">client_id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;WARNING&quot;</span><span class="p">)</span>
+                <span class="n">disconnected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">client_id</span><span class="p">)</span>
+
+        <span class="c1"># Nettoyer les connexions mortes (sans appeler disconnect pour éviter la récursion)</span>
+        <span class="k">for</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="n">disconnected</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">:</span>
+                <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">:</span>
+                <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span></div>
+
+            
+<div class="viewcode-block" id="GameManager.send_to_client">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.send_to_client">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">send_to_client</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Envoie un message JSON à un seul joueur ciblé.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            client_id: Identifiant du joueur destinataire.</span>
+<span class="sd">            message: Dictionnaire à sérialiser en JSON et envoyer.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Log l&#39;envoi</span>
+        <span class="n">log_websocket</span><span class="p">(</span><span class="n">client_id</span><span class="p">,</span> <span class="s2">&quot;OUT&quot;</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">:</span>
+            <span class="n">ws</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Erreur lors de l&#39;envoi à </span><span class="si">{</span><span class="n">client_id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;WARNING&quot;</span><span class="p">)</span>
+                <span class="c1"># Nettoyer la connexion morte</span>
+                <span class="k">if</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">:</span>
+                    <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">:</span>
+                    <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span></div>
+
+
+    <span class="c1"># --- Logique de Jeu Principale (MODIFIÉE) ---</span>
+
+<div class="viewcode-block" id="GameManager.process_message">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.process_message">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">process_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Traite un message reçu d&#39;un joueur (cœur de la logique de jeu).</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            client_id: Identifiant du joueur émetteur.</span>
+<span class="sd">            data: Dictionnaire JSON contenant l&#39;action et ses paramètres.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="n">action</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">action</span> <span class="o">==</span> <span class="s2">&quot;phrase_finished&quot;</span><span class="p">:</span>
+            <span class="c1"># 1. Le Pi a fini la phrase. On stocke son résultat pour CETTE manche.</span>
+            <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Résultat de manche reçu de </span><span class="si">{</span><span class="n">client_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;DEBUG&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">client_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+            
+            <span class="c1"># 2. Informer le joueur qu&#39;on attend les autres</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_to_client</span><span class="p">(</span><span class="n">client_id</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;round_wait&quot;</span><span class="p">,</span> <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;En attente des autres joueurs...&quot;</span><span class="p">})</span>
+
+            <span class="c1"># 3. VÉRIFIER SI LA MANCHE EST TERMINÉE</span>
+            <span class="c1"># La manche est finie si on a reçu un résultat de TOUS les joueurs connectés</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">):</span>
+                <span class="c1"># OUI ! Tout le monde a fini.</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_round_end</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># NON. On attend encore des joueurs.</span>
+                <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="GameManager.process_round_end">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.process_round_end">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">process_round_end</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Clôture une manche : calcule le classement, met à jour les scores,</span>
+<span class="sd">        puis lance automatiquement la manche suivante (ou termine le jeu).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="s2">&quot;Fin de la manche ! Calcul du classement...&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Trier les résultats pour obtenir le classement (le plus rapide en premier)</span>
+        <span class="c1"># item[0] = client_id, item[1] = data (résumé de la phrase)</span>
+        <span class="n">sorted_results</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> 
+            <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;time_taken&quot;</span><span class="p">,</span> <span class="mi">99</span><span class="p">)</span>
+        <span class="p">)</span>
+        
+        <span class="n">classement_data</span> <span class="o">=</span> <span class="p">[]</span>
+        
+        <span class="c1"># Parcourir le classement pour attribuer les points et les effets</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">client_id</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">sorted_results</span><span class="p">):</span>
+            <span class="n">rank</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span>
+            
+            <span class="c1"># Attribuer des points en fonction du classement</span>
+            <span class="n">points_de_classement</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1000</span> <span class="o">-</span> <span class="p">(</span><span class="n">rank</span> <span class="o">*</span> <span class="mi">200</span><span class="p">))</span> <span class="c1"># Ex: 1er=800, 2e=600...</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span> <span class="o">+=</span> <span class="n">points_de_classement</span>
+            
+            <span class="c1"># Gérer les bonus/malus de la phrase (comme avant)</span>
+            <span class="n">triggered_objects</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;objects_triggered&quot;</span><span class="p">,</span> <span class="p">[])</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_effects</span><span class="p">(</span><span class="n">client_id</span><span class="p">,</span> <span class="n">triggered_objects</span><span class="p">)</span> <span class="c1"># Applique les effets (bonus/malus)</span>
+            
+            <span class="c1"># Construire l&#39;objet de classement à envoyer aux joueurs</span>
+            <span class="n">classement_data</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                <span class="s2">&quot;rank&quot;</span><span class="p">:</span> <span class="n">rank</span><span class="p">,</span>
+                <span class="s2">&quot;client_id&quot;</span><span class="p">:</span> <span class="n">client_id</span><span class="p">,</span>
+                <span class="s2">&quot;time&quot;</span><span class="p">:</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;time_taken&quot;</span><span class="p">),</span>
+                <span class="s2">&quot;score_added&quot;</span><span class="p">:</span> <span class="n">points_de_classement</span> 
+            <span class="p">})</span>
+
+        <span class="c1"># 3. Envoyer le classement de la manche ET les scores globaux à tout le monde</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;round_classement&quot;</span><span class="p">,</span> 
+            <span class="s2">&quot;classement&quot;</span><span class="p">:</span> <span class="n">classement_data</span><span class="p">,</span>
+            <span class="s2">&quot;global_scores&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span>
+        <span class="p">})</span>
+        
+        <span class="c1"># Attendre 5 secondes pour que les joueurs voient le classement</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span> 
+        
+        <span class="c1"># Préparer la manche suivante</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span> <span class="o">+=</span> <span class="mi">1</span>
+        
+        <span class="c1"># Vérifier si le jeu est terminé</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">):</span>
+            <span class="c1"># JEU TERMINÉ</span>
+            <span class="n">log_server</span><span class="p">(</span><span class="s2">&quot;JEU TERMINE !&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;game_over&quot;</span><span class="p">,</span> <span class="s2">&quot;final_scores&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">})</span>
+            <span class="c1"># Réinitialiser le jeu</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">scores</span> <span class="o">=</span> <span class="p">{</span><span class="n">pid</span><span class="p">:</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">pid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span> <span class="c1"># Reset scores</span>
+        
+        <span class="c1"># Lancer la manche suivante</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Lancement de la manche </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span> <span class="o">=</span> <span class="p">{}</span> <span class="c1"># Vider les résultats pour la nouvelle manche</span>
+        <span class="n">new_phrase</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span><span class="p">]</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;new_phrase&quot;</span><span class="p">,</span> <span class="s2">&quot;phrase&quot;</span><span class="p">:</span> <span class="n">new_phrase</span><span class="p">,</span> <span class="s2">&quot;round_number&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span><span class="p">})</span></div>
+
+
+    <span class="c1"># (J&#39;ai supprimé calculate_score car s score est maintenant basé sur le classement)</span>
+
+<div class="viewcode-block" id="GameManager.apply_effects">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.apply_effects">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">apply_effects</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">objects</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Applique les bonus et malus déclenchés pendant une manche.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            client_id: Identifiant du joueur qui a déclenché les objets.</span>
+<span class="sd">            objects: Liste de dictionnaires décrivant chaque objet déclenché.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">objects</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">obj</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;bonus&quot;</span> <span class="ow">and</span> <span class="n">obj</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;success&quot;</span><span class="p">):</span>
+                <span class="c1"># Appliquer un bonus</span>
+                <span class="n">bonus_points</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">object_manager</span><span class="o">.</span><span class="n">get_bonus_effect</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span> <span class="o">+=</span> <span class="n">bonus_points</span>
+                <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Joueur </span><span class="si">{</span><span class="n">client_id</span><span class="si">}</span><span class="s2"> gagne </span><span class="si">{</span><span class="n">bonus_points</span><span class="si">}</span><span class="s2"> points bonus!&quot;</span><span class="p">,</span> <span class="s2">&quot;DEBUG&quot;</span><span class="p">)</span>
+                
+            <span class="k">elif</span> <span class="n">obj</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;malus&quot;</span> <span class="ow">and</span> <span class="n">obj</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;success&quot;</span><span class="p">):</span>
+                <span class="c1"># Appliquer un malus (sur un adversaire aléatoire)</span>
+                <span class="n">effect</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">object_manager</span><span class="o">.</span><span class="n">get_malus_effect</span><span class="p">()</span>
+                <span class="n">target_player</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_random_opponent</span><span class="p">(</span><span class="n">client_id</span><span class="p">)</span>
+                
+                <span class="k">if</span> <span class="n">target_player</span><span class="p">:</span>
+                    <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Joueur </span><span class="si">{</span><span class="n">client_id</span><span class="si">}</span><span class="s2"> envoie un malus &#39;</span><span class="si">{</span><span class="n">effect</span><span class="si">}</span><span class="s2">&#39; à </span><span class="si">{</span><span class="n">target_player</span><span class="si">}</span><span class="s2">!&quot;</span><span class="p">,</span> <span class="s2">&quot;DEBUG&quot;</span><span class="p">)</span>
+                    <span class="c1"># Envoyer la commande d&#39;action hardware au Pi de l&#39;adversaire</span>
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_to_client</span><span class="p">(</span><span class="n">target_player</span><span class="p">,</span> <span class="p">{</span>
+                        <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;hardware_action&quot;</span><span class="p">,</span> 
+                        <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="n">effect</span>
+                    <span class="p">})</span></div>
+
+
+<div class="viewcode-block" id="GameManager.get_new_phrase">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.get_new_phrase">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_new_phrase</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retourne une phrase choisie aléatoirement parmi celles disponibles.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Une phrase de la liste `self.phrases`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GameManager.get_random_opponent">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.get_random_opponent">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_random_opponent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">self_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Choisit un adversaire aléatoire parmi les joueurs connectés.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            self_id: Identifiant du joueur à exclure (celui qui déclenche).</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Identifiant d&#39;un adversaire aléatoire, ou None si aucun disponible.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">opponents</span> <span class="o">=</span> <span class="p">[</span><span class="n">pid</span> <span class="k">for</span> <span class="n">pid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="k">if</span> <span class="n">pid</span> <span class="o">!=</span> <span class="n">self_id</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">opponents</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">opponents</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="GameManager.get_current_scores">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.get_current_scores">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_current_scores</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retourne les scores actuels de tous les joueurs.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionnaire {identifiant_joueur: score}.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span></div>
+
+
+    <span class="c1"># ==================== ADMIN METHODS ====================</span>
+
+    <span class="c1"># --- Admin Connection Management ---</span>
+
+<div class="viewcode-block" id="GameManager.connect_admin">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.connect_admin">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">connect_admin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">websocket</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enregistre une connexion admin et lui envoie l&#39;état initial.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            websocket: Connexion WebSocket de l&#39;admin.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">admin_connections</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">websocket</span><span class="p">)</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Admin connecté. Total: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">admin_connections</span><span class="p">)</span><span class="si">}</span><span class="s2"> admins.&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+        <span class="c1"># Envoyer l&#39;état initial à l&#39;admin</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_state_to_admin</span><span class="p">(</span><span class="n">websocket</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GameManager.disconnect_admin">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.disconnect_admin">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">disconnect_admin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">websocket</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retire une connexion admin de la liste.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            websocket: Connexion WebSocket de l&#39;admin à retirer.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">websocket</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">admin_connections</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">admin_connections</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">websocket</span><span class="p">)</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Admin déconnecté. Total: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">admin_connections</span><span class="p">)</span><span class="si">}</span><span class="s2"> admins.&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GameManager.broadcast_to_admins">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.broadcast_to_admins">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">broadcast_to_admins</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Envoie un message JSON à tous les admins connectés.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            message: Dictionnaire à sérialiser et envoyer.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">disconnected</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">admin_ws</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">admin_connections</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">admin_ws</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">disconnected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">admin_ws</span><span class="p">)</span>
+
+        <span class="c1"># Nettoyer les connexions mortes</span>
+        <span class="k">for</span> <span class="n">ws</span> <span class="ow">in</span> <span class="n">disconnected</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">admin_connections</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">ws</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GameManager.send_state_to_admin">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.send_state_to_admin">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">send_state_to_admin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">websocket</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Envoie l&#39;état complet du jeu à une seule connexion admin.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            websocket: Connexion WebSocket de l&#39;admin cible.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_game_state</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">websocket</span><span class="o">.</span><span class="n">send_json</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">pass</span></div>
+
+
+    <span class="c1"># --- Game Control Methods ---</span>
+
+<div class="viewcode-block" id="GameManager.start_game">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.start_game">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">start_game</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Démarre une nouvelle partie depuis la manche 0.&quot;&quot;&quot;</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="s2">&quot;Démarrage d&#39;une nouvelle partie par l&#39;arbitre&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">game_status</span> <span class="o">=</span> <span class="s2">&quot;playing&quot;</span>
+
+        <span class="c1"># Reset scores si partie terminée</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span> <span class="ow">or</span> <span class="nb">all</span><span class="p">(</span><span class="n">s</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="o">.</span><span class="n">values</span><span class="p">()):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">scores</span> <span class="o">=</span> <span class="p">{</span><span class="n">pid</span><span class="p">:</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">pid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+
+        <span class="c1"># Envoyer la première phrase</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">phrases</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;new_phrase&quot;</span><span class="p">,</span> <span class="s2">&quot;phrase&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;round_number&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">})</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">notify_admins_state_change</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="GameManager.pause_game">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.pause_game">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">pause_game</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Met le jeu en pause et notifie joueurs + admins.&quot;&quot;&quot;</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="s2">&quot;Jeu mis en pause par l&#39;arbitre&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">game_status</span> <span class="o">=</span> <span class="s2">&quot;paused&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;game_paused&quot;</span><span class="p">,</span> <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;Partie en pause par l&#39;arbitre&quot;</span><span class="p">})</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">notify_admins_state_change</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="GameManager.reset_game">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.reset_game">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">reset_game</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Réinitialise complètement le jeu (scores, manche, état).&quot;&quot;&quot;</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="s2">&quot;Réinitialisation complète du jeu par l&#39;arbitre&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scores</span> <span class="o">=</span> <span class="p">{</span><span class="n">pid</span><span class="p">:</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">pid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">game_status</span> <span class="o">=</span> <span class="s2">&quot;waiting&quot;</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;game_reset&quot;</span><span class="p">,</span> <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;Partie réinitialisée&quot;</span><span class="p">})</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;player_update&quot;</span><span class="p">,</span> <span class="s2">&quot;scores&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">})</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">notify_admins_state_change</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="GameManager.force_next_round">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.force_next_round">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">force_next_round</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Force le passage à la manche suivante, même si des joueurs n&#39;ont pas fini.&quot;&quot;&quot;</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="s2">&quot;Passage forcé à la manche suivante par l&#39;arbitre&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Si on a des résultats, traiter la fin de manche normalement</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_round_end</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Sinon, juste avancer</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">):</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">end_game</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="n">new_phrase</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span><span class="p">]</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;new_phrase&quot;</span><span class="p">,</span> <span class="s2">&quot;phrase&quot;</span><span class="p">:</span> <span class="n">new_phrase</span><span class="p">,</span> <span class="s2">&quot;round_number&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span><span class="p">})</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">notify_admins_state_change</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="GameManager.end_game">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.end_game">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">end_game</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Termine immédiatement la partie et sauvegarde dans l&#39;historique.&quot;&quot;&quot;</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="s2">&quot;Fin de partie forcée par l&#39;arbitre&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">game_status</span> <span class="o">=</span> <span class="s2">&quot;finished&quot;</span>
+
+        <span class="c1"># Sauvegarder dans l&#39;historique</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">game_history</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+            <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">(),</span>
+            <span class="s2">&quot;final_scores&quot;</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">),</span>
+            <span class="s2">&quot;rounds_played&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span>
+        <span class="p">})</span>
+
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;game_over&quot;</span><span class="p">,</span> <span class="s2">&quot;final_scores&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">})</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">notify_admins_state_change</span><span class="p">()</span>
+
+        <span class="c1"># Reset pour la prochaine partie</span>
+        <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scores</span> <span class="o">=</span> <span class="p">{</span><span class="n">pid</span><span class="p">:</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">pid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">game_status</span> <span class="o">=</span> <span class="s2">&quot;waiting&quot;</span></div>
+
+
+    <span class="c1"># --- Player Management Methods ---</span>
+
+<div class="viewcode-block" id="GameManager.kick_player">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.kick_player">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">kick_player</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expulse un joueur et ferme sa connexion WebSocket.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            client_id: Identifiant du joueur à expulser.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">:</span>
+            <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Joueur </span><span class="si">{</span><span class="n">client_id</span><span class="si">}</span><span class="s2"> expulsé par l&#39;arbitre&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+            <span class="n">ws</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span>
+            <span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">send_json</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;kicked&quot;</span><span class="p">,</span> <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="s2">&quot;Vous avez été expulsé par l&#39;arbitre&quot;</span><span class="p">})</span>
+            <span class="k">await</span> <span class="n">ws</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">disconnect</span><span class="p">(</span><span class="n">client_id</span><span class="p">)</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">notify_admins_state_change</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="GameManager.kick_all_players">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.kick_all_players">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">kick_all_players</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Expulse tous les joueurs connectés un par un.&quot;&quot;&quot;</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="s2">&quot;Tous les joueurs expulsés par l&#39;arbitre&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+        <span class="n">players_to_kick</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="n">players_to_kick</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">kick_player</span><span class="p">(</span><span class="n">client_id</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GameManager.set_player_score">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.set_player_score">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">set_player_score</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">new_score</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Modifie manuellement le score d&#39;un joueur.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            client_id: Identifiant du joueur concerné.</span>
+<span class="sd">            new_score: Nouveau score à attribuer.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">client_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">:</span>
+            <span class="n">old_score</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">[</span><span class="n">client_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_score</span>
+            <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Score de </span><span class="si">{</span><span class="n">client_id</span><span class="si">}</span><span class="s2"> modifié: </span><span class="si">{</span><span class="n">old_score</span><span class="si">}</span><span class="s2"> → </span><span class="si">{</span><span class="n">new_score</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;player_update&quot;</span><span class="p">,</span> <span class="s2">&quot;scores&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">})</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">notify_admins_state_change</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="GameManager.reset_all_scores">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.reset_all_scores">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">reset_all_scores</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Remet tous les scores à zéro et notifie.&quot;&quot;&quot;</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="s2">&quot;Réinitialisation de tous les scores par l&#39;arbitre&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scores</span> <span class="o">=</span> <span class="p">{</span><span class="n">pid</span><span class="p">:</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">pid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="o">.</span><span class="n">keys</span><span class="p">()}</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;player_update&quot;</span><span class="p">,</span> <span class="s2">&quot;scores&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">})</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">notify_admins_state_change</span><span class="p">()</span></div>
+
+
+    <span class="c1"># --- Phrase Management Methods ---</span>
+
+<div class="viewcode-block" id="GameManager.add_phrase">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.add_phrase">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">add_phrase</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">phrase</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Ajoute une phrase à la liste et notifie les admins.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            phrase: Texte de la nouvelle phrase (peut contenir ^^bonus^^ et &amp;malus&amp;).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">phrase</span><span class="p">)</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Nouvelle phrase ajoutée: </span><span class="si">{</span><span class="n">phrase</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">notify_admins_state_change</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="GameManager.delete_phrase">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.delete_phrase">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">delete_phrase</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Supprime une phrase par son index et ajuste l&#39;index courant si nécessaire.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            index: Position de la phrase à supprimer dans `self.phrases`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">index</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">):</span>
+            <span class="n">deleted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+            <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Phrase supprimée: </span><span class="si">{</span><span class="n">deleted</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Ajuster l&#39;index si nécessaire</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">notify_admins_state_change</span><span class="p">()</span></div>
+
+
+    <span class="c1"># --- State Query Methods ---</span>
+
+<div class="viewcode-block" id="GameManager.get_game_state">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.get_game_state">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_game_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retourne l&#39;état complet du jeu sous forme de dictionnaire.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionnaire contenant manche, joueurs, scores, phrases et statut.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;state_update&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;current_round&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span><span class="p">,</span>
+            <span class="s2">&quot;total_rounds&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">),</span>
+            <span class="s2">&quot;player_count&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">),</span>
+            <span class="s2">&quot;game_status&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">game_status</span><span class="p">,</span>
+            <span class="s2">&quot;current_phrase&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">phrases</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;players&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">pid</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;connected&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span> <span class="k">for</span> <span class="n">pid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="o">.</span><span class="n">keys</span><span class="p">()},</span>
+            <span class="s2">&quot;scores&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="p">,</span>
+            <span class="s2">&quot;phrases&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">phrases</span><span class="p">,</span>
+            <span class="s2">&quot;current_phrase_index&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_phrase_index</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="GameManager.get_round_stats">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.get_round_stats">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_round_stats</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retourne les statistiques de la manche en cours.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionnaire avec nombre de joueurs finis, temps moyen, erreurs et bonuses.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;round_stats&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;stats&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;finished&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                    <span class="s2">&quot;total&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">),</span>
+                    <span class="s2">&quot;avg_time&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="s2">&quot;total_errors&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                    <span class="s2">&quot;bonuses&quot;</span><span class="p">:</span> <span class="mi">0</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+
+        <span class="n">times</span> <span class="o">=</span> <span class="p">[</span><span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;time_taken&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="o">.</span><span class="n">values</span><span class="p">()]</span>
+        <span class="n">errors</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;errors&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+        <span class="n">bonuses</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span>
+            <span class="nb">len</span><span class="p">([</span><span class="n">obj</span> <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">r</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;objects_triggered&quot;</span><span class="p">,</span> <span class="p">[])</span> <span class="k">if</span> <span class="n">obj</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;bonus&quot;</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;round_stats&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;stats&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;finished&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">current_round_results</span><span class="p">),</span>
+                <span class="s2">&quot;total&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_players</span><span class="p">),</span>
+                <span class="s2">&quot;avg_time&quot;</span><span class="p">:</span> <span class="nb">sum</span><span class="p">(</span><span class="n">times</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">)</span> <span class="k">if</span> <span class="n">times</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="s2">&quot;total_errors&quot;</span><span class="p">:</span> <span class="n">errors</span><span class="p">,</span>
+                <span class="s2">&quot;bonuses&quot;</span><span class="p">:</span> <span class="n">bonuses</span>
+            <span class="p">}</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="GameManager.get_current_ranking">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.get_current_ranking">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_current_ranking</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Retourne le classement actuel trié par score décroissant.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Dictionnaire avec la liste ordonnée des joueurs et leurs scores.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sorted_scores</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scores</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ranking</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">{</span><span class="s2">&quot;client_id&quot;</span><span class="p">:</span> <span class="n">client_id</span><span class="p">,</span> <span class="s2">&quot;score&quot;</span><span class="p">:</span> <span class="n">score</span><span class="p">}</span>
+            <span class="k">for</span> <span class="n">client_id</span><span class="p">,</span> <span class="n">score</span> <span class="ow">in</span> <span class="n">sorted_scores</span>
+        <span class="p">]</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;ranking_update&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;ranking&quot;</span><span class="p">:</span> <span class="n">ranking</span>
+        <span class="p">}</span></div>
+
+
+    <span class="c1"># --- Admin Notification Methods ---</span>
+
+<div class="viewcode-block" id="GameManager.notify_admins_state_change">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.notify_admins_state_change">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">notify_admins_state_change</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Pousse l&#39;état, le classement et les stats à tous les admins.&quot;&quot;&quot;</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_game_state</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_to_admins</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+        <span class="c1"># Envoyer aussi le classement et les stats</span>
+        <span class="n">ranking</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_current_ranking</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_to_admins</span><span class="p">(</span><span class="n">ranking</span><span class="p">)</span>
+
+        <span class="n">stats</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_round_stats</span><span class="p">()</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_to_admins</span><span class="p">(</span><span class="n">stats</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GameManager.send_log_to_admins">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.send_log_to_admins">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">send_log_to_admins</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;info&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Envoie un message de log formaté à tous les admins.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            message: Texte du log.</span>
+<span class="sd">            level: Niveau — &#39;info&#39;, &#39;warning&#39;, &#39;error&#39;.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast_to_admins</span><span class="p">({</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;log&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="n">message</span><span class="p">,</span>
+            <span class="s2">&quot;level&quot;</span><span class="p">:</span> <span class="n">level</span>
+        <span class="p">})</span></div>
+
+
+<div class="viewcode-block" id="GameManager.broadcast_admin_message">
+<a class="viewcode-back" href="../../modules/gamemanager.html#server_app.GameManager.GameManager.broadcast_admin_message">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">broadcast_admin_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Diffuse un message de l&#39;arbitre à tous les joueurs.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            message: Texte du message à diffuser.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">log_server</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Message arbitre diffusé: </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">broadcast</span><span class="p">({</span>
+            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;admin_message&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="n">message</span>
+        <span class="p">})</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">send_log_to_admins</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Message diffusé: </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;info&quot;</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Équipe RaceTyper.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,4 +1,5 @@
 gymnasium
+requests
 stable-baselines3
 shimmy
 matplotlib

@@ -1,0 +1,195 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>app — Point d’entrée FastAPI &mdash; RaceTyper — Server Arbitre 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="GameManager — Cerveau du jeu" href="gamemanager.html" />
+    <link rel="prev" title="RaceTyper — Server Arbitre" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            RaceTyper — Server Arbitre
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">app — Point d’entrée FastAPI</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#server_app.app.admin_interface"><code class="docutils literal notranslate"><span class="pre">admin_interface()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#server_app.app.admin_websocket"><code class="docutils literal notranslate"><span class="pre">admin_websocket()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#server_app.app.export_stats"><code class="docutils literal notranslate"><span class="pre">export_stats()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#server_app.app.get_admin_state"><code class="docutils literal notranslate"><span class="pre">get_admin_state()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#server_app.app.get_scores"><code class="docutils literal notranslate"><span class="pre">get_scores()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#server_app.app.websocket_endpoint"><code class="docutils literal notranslate"><span class="pre">websocket_endpoint()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="gamemanager.html">GameManager — Cerveau du jeu</a></li>
+<li class="toctree-l1"><a class="reference internal" href="objectmanager.html">ObjectManager — Bonus / Malus</a></li>
+<li class="toctree-l1"><a class="reference internal" href="logger.html">logger — Logging console</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">RaceTyper — Server Arbitre</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">app — Point d’entrée FastAPI</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/modules/app.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-server_app.app">
+<span id="app-point-d-entree-fastapi"></span><h1>app — Point d’entrée FastAPI<a class="headerlink" href="#module-server_app.app" title="Link to this heading"></a></h1>
+<p>Point d’entrée FastAPI du serveur arbitre RaceTyper.</p>
+<p>Définit trois catégories de routes :</p>
+<ul class="simple">
+<li><p><strong>Routes admin</strong> : interface web + API d’administration.</p></li>
+<li><p><strong>Routes publiques</strong> : API REST consommée par l’app mobile.</p></li>
+<li><p><strong>WebSockets</strong> : connexions temps réel joueurs et admin.</p></li>
+</ul>
+<dl class="py function">
+<dt class="sig sig-object py" id="server_app.app.admin_interface">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">server_app.app.</span></span><span class="sig-name descname"><span class="pre">admin_interface</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">fastapi.responses.HTMLResponse</span></span></span><a class="headerlink" href="#server_app.app.admin_interface" title="Link to this definition"></a></dt>
+<dd><p>Sert la page HTML de l’interface d’administration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Contenu HTML de admin.html, ou une page 404 si le fichier est absent.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="server_app.app.admin_websocket">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">server_app.app.</span></span><span class="sig-name descname"><span class="pre">admin_websocket</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">websocket</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">fastapi.WebSocket</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#server_app.app.admin_websocket" title="Link to this definition"></a></dt>
+<dd><p>WebSocket pour l’interface admin — reçoit les commandes et pousse les mises à jour.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>websocket</strong> – Connexion WebSocket de l’admin.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="server_app.app.export_stats">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">server_app.app.</span></span><span class="sig-name descname"><span class="pre">export_stats</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">fastapi.responses.JSONResponse</span></span></span><a class="headerlink" href="#server_app.app.export_stats" title="Link to this definition"></a></dt>
+<dd><p>Exporte les scores, l’historique et les phrases en JSON.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>JSONResponse téléchargeable contenant les données complètes.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="server_app.app.get_admin_state">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">server_app.app.</span></span><span class="sig-name descname"><span class="pre">get_admin_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">fastapi.responses.JSONResponse</span></span></span><a class="headerlink" href="#server_app.app.get_admin_state" title="Link to this definition"></a></dt>
+<dd><p>Retourne l’état complet du jeu sous forme JSON.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>JSONResponse contenant manche, joueurs, scores et phrases.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="server_app.app.get_scores">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">server_app.app.</span></span><span class="sig-name descname"><span class="pre">get_scores</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">fastapi.responses.JSONResponse</span></span></span><a class="headerlink" href="#server_app.app.get_scores" title="Link to this definition"></a></dt>
+<dd><p>Fournit l’état actuel des scores à l’application mobile.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>JSONResponse avec statut ‘success’ et le dictionnaire des scores.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="server_app.app.websocket_endpoint">
+<span class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">server_app.app.</span></span><span class="sig-name descname"><span class="pre">websocket_endpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">websocket</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">fastapi.WebSocket</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#server_app.app.websocket_endpoint" title="Link to this definition"></a></dt>
+<dd><p>Connexion WebSocket persistante pour un joueur (un Pi).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>websocket</strong> – Connexion WebSocket fournie par FastAPI.</p></li>
+<li><p><strong>client_id</strong> – Identifiant unique du joueur dans l’URL (ex. ‘pi-1’).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="RaceTyper — Server Arbitre" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="gamemanager.html" class="btn btn-neutral float-right" title="GameManager — Cerveau du jeu" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Équipe RaceTyper.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

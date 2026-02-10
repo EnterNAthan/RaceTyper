@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RaceTyper // Interface Arbitre</title>
+    <link rel="stylesheet" href="/static/admin.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%E2%9A%A1</text></svg>">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>RaceTyper - Interface Arbitre</h1>
+            <div class="connection-status">
+                <span id="connectionStatus" class="status disconnected">Offline</span>
+            </div>
+        </header>
+
+        <div class="main-grid">
+            <!-- Section État du Jeu -->
+            <section class="card game-state">
+                <h2>État du Jeu</h2>
+                <div class="game-info">
+                    <div class="info-item">
+                        <span class="label">Manche</span>
+                        <span id="currentRound" class="value">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Joueurs connectés</span>
+                        <span id="playerCount" class="value">0</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Statut</span>
+                        <span id="gameStatus" class="value badge">En attente</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Phrase actuelle</span>
+                        <span id="currentPhrase" class="value phrase-text">-</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section Contrôles -->
+            <section class="card controls">
+                <h2>Contrôles de Jeu</h2>
+                <div class="control-buttons">
+                    <button id="btnStartGame" class="btn btn-success">Démarrer</button>
+                    <button id="btnPauseGame" class="btn btn-warning">Pause</button>
+                    <button id="btnResetGame" class="btn btn-danger">Reset</button>
+                    <button id="btnNextRound" class="btn btn-primary">Manche Suivante</button>
+                    <button id="btnEndGame" class="btn btn-danger">Terminer</button>
+                </div>
+            </section>
+
+            <!-- Section Joueurs Connectés -->
+            <section class="card players">
+                <h2>Joueurs Connectés</h2>
+                <div id="playersList" class="players-list">
+                    <p class="empty-state">Aucun joueur connecté</p>
+                </div>
+            </section>
+
+            <!-- Section Classement -->
+            <section class="card ranking">
+                <h2>Classement Actuel</h2>
+                <div id="rankingList" class="ranking-list">
+                    <p class="empty-state">En attente de scores</p>
+                </div>
+            </section>
+
+            <!-- Section Gestion des Phrases -->
+            <section class="card phrases">
+                <h2>Gestion des Phrases</h2>
+                <div class="phrases-container">
+                    <div id="phrasesList" class="phrases-list"></div>
+                    <div class="phrase-add">
+                        <textarea id="newPhraseInput" placeholder="Nouvelle phrase (utilisez ^^bonus^^ et &malus&)"></textarea>
+                        <button id="btnAddPhrase" class="btn btn-primary">Ajouter</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Section Logs -->
+            <section class="card logs">
+                <h2>Logs Temps Réel</h2>
+                <div class="logs-controls">
+                    <button id="btnClearLogs" class="btn btn-small btn-secondary">Effacer</button>
+                    <label>
+                        <input type="checkbox" id="autoScrollLogs" checked>
+                        Auto-scroll
+                    </label>
+                </div>
+                <div id="logsList" class="logs-list"></div>
+            </section>
+
+            <!-- Section Actions Rapides -->
+            <section class="card quick-actions">
+                <h2>Actions Rapides</h2>
+                <div class="quick-actions-grid">
+                    <button id="btnBroadcastMessage" class="btn btn-info">Message Global</button>
+                    <button id="btnResetScores" class="btn btn-warning">RAZ Scores</button>
+                    <button id="btnKickAll" class="btn btn-danger">Kick Tous</button>
+                    <button id="btnExportStats" class="btn btn-success">Export Stats</button>
+                </div>
+            </section>
+
+            <!-- Section Statistiques de la Manche -->
+            <section class="card round-stats">
+                <h2>Statistiques Manche</h2>
+                <div id="roundStats" class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-label">Joueurs terminés</span>
+                        <span id="statFinished" class="stat-value">0/0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Temps moyen</span>
+                        <span id="statAvgTime" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Erreurs totales</span>
+                        <span id="statTotalErrors" class="stat-value">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Bonus activés</span>
+                        <span id="statBonuses" class="stat-value">-</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Modal pour message global -->
+    <div id="broadcastModal" class="modal">
+        <div class="modal-content">
+            <h3>Message Global</h3>
+            <textarea id="broadcastMessage" placeholder="Message à envoyer à tous les joueurs"></textarea>
+            <div class="modal-buttons">
+                <button id="btnSendBroadcast" class="btn btn-primary">Envoyer</button>
+                <button id="btnCancelBroadcast" class="btn btn-secondary">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal pour modifier le score -->
+    <div id="scoreModal" class="modal">
+        <div class="modal-content">
+            <h3>Modifier le Score</h3>
+            <p>Joueur: <strong id="scoreModalPlayer"></strong></p>
+            <input type="number" id="scoreModalInput" placeholder="Nouveau score">
+            <div class="modal-buttons">
+                <button id="btnSaveScore" class="btn btn-primary">Sauvegarder</button>
+                <button id="btnCancelScore" class="btn btn-secondary">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/admin.js"></script>
+</body>
+</html>

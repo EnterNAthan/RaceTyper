@@ -1,0 +1,176 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>server_app.logger &mdash; RaceTyper — Server Arbitre 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            RaceTyper — Server Arbitre
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../modules/app.html">app — Point d’entrée FastAPI</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../modules/gamemanager.html">GameManager — Cerveau du jeu</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../modules/objectmanager.html">ObjectManager — Bonus / Malus</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../modules/logger.html">logger — Logging console</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">RaceTyper — Server Arbitre</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">server_app.logger</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for server_app.logger</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Logging coloré en console pour le serveur arbitre.</span>
+
+<span class="sd">Fournit deux fonctions principales : une pour les échanges WebSocket,</span>
+<span class="sd">une pour les messages internes du serveur.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
+
+
+<div class="viewcode-block" id="bcolors">
+<a class="viewcode-back" href="../../modules/logger.html#server_app.logger.bcolors">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">bcolors</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Codes ANSI pour la coloration des messages en terminal.&quot;&quot;&quot;</span>
+
+    <span class="n">HEADER</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[95m&#39;</span>
+    <span class="n">OKBLUE</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[94m&#39;</span>
+    <span class="n">OKGREEN</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[92m&#39;</span>
+    <span class="n">WARNING</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[93m&#39;</span>
+    <span class="n">FAIL</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[91m&#39;</span>
+    <span class="n">ENDC</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[0m&#39;</span>
+    <span class="n">BOLD</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\033</span><span class="s1">[1m&#39;</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_time</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Retourne un timestamp formaté HH:MM:SS.mmm.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">&quot;%H:%M:%S.</span><span class="si">%f</span><span class="s2">&quot;</span><span class="p">)[:</span><span class="o">-</span><span class="mi">3</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="log_websocket">
+<a class="viewcode-back" href="../../modules/logger.html#server_app.logger.log_websocket">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">log_websocket</span><span class="p">(</span><span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">direction</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Formate et affiche un échange WebSocket en console.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        client_id: Identifiant du client concerné (ex. &#39;pi-1&#39;, &#39;TOUS&#39;).</span>
+<span class="sd">        direction: &#39;IN&#39; (client → serveur) ou &#39;OUT&#39; (serveur → client).</span>
+<span class="sd">        message: Dictionnaire JSON du message échangé.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">time</span> <span class="o">=</span> <span class="n">_get_time</span><span class="p">()</span>
+    
+    <span class="k">if</span> <span class="n">direction</span> <span class="o">==</span> <span class="s2">&quot;IN&quot;</span><span class="p">:</span>
+        <span class="c1"># Vert: Le serveur reçoit</span>
+        <span class="n">color</span> <span class="o">=</span> <span class="n">bcolors</span><span class="o">.</span><span class="n">OKGREEN</span>
+        <span class="n">dir_arrow</span> <span class="o">=</span> <span class="s2">&quot;&lt;- IN &quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Jaune: Le serveur envoie</span>
+        <span class="n">color</span> <span class="o">=</span> <span class="n">bcolors</span><span class="o">.</span><span class="n">WARNING</span>
+        <span class="n">dir_arrow</span> <span class="o">=</span> <span class="s2">&quot;-&gt; OUT&quot;</span>
+        
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bcolors</span><span class="o">.</span><span class="n">BOLD</span><span class="si">}</span><span class="s2">[WS </span><span class="si">{</span><span class="n">time</span><span class="si">}</span><span class="s2">]</span><span class="si">{</span><span class="n">color</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">dir_arrow</span><span class="si">}</span><span class="s2"> [</span><span class="si">{</span><span class="n">client_id</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">bcolors</span><span class="o">.</span><span class="n">ENDC</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="log_server">
+<a class="viewcode-back" href="../../modules/logger.html#server_app.logger.log_server">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">log_server</span><span class="p">(</span><span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;INFO&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Formate et affiche un message interne du serveur en console.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        message: Texte du message à afficher.</span>
+<span class="sd">        level: Niveau de sévérité — &#39;INFO&#39;, &#39;DEBUG&#39; ou &#39;ERROR&#39;.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">time</span> <span class="o">=</span> <span class="n">_get_time</span><span class="p">()</span>
+    
+    <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;ERROR&quot;</span><span class="p">:</span>
+        <span class="n">color</span> <span class="o">=</span> <span class="n">bcolors</span><span class="o">.</span><span class="n">FAIL</span>
+    <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">&quot;DEBUG&quot;</span><span class="p">:</span>
+        <span class="n">color</span> <span class="o">=</span> <span class="n">bcolors</span><span class="o">.</span><span class="n">OKBLUE</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">color</span> <span class="o">=</span> <span class="n">bcolors</span><span class="o">.</span><span class="n">HEADER</span> <span class="c1"># Violet pour INFO</span>
+        
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">bcolors</span><span class="o">.</span><span class="n">BOLD</span><span class="si">}</span><span class="s2">[SRV </span><span class="si">{</span><span class="n">time</span><span class="si">}</span><span class="s2">]</span><span class="si">{</span><span class="n">color</span><span class="si">}</span><span class="s2"> [</span><span class="si">{</span><span class="n">level</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">bcolors</span><span class="o">.</span><span class="n">ENDC</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Équipe RaceTyper.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
