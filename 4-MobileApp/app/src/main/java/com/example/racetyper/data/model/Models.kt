@@ -25,7 +25,8 @@ enum class GameStatus {
     WAITING,
     PLAYING,
     PAUSED,
-    FINISHED;
+    FINISHED,
+    GAME_OVER;
 
     companion object {
         fun fromString(value: String): GameStatus {
@@ -33,7 +34,7 @@ enum class GameStatus {
                 "waiting" -> WAITING
                 "playing" -> PLAYING
                 "paused" -> PAUSED
-                "finished" -> FINISHED
+                "finished", "game_over" -> GAME_OVER
                 else -> WAITING
             }
         }

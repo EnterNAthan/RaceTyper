@@ -26,9 +26,10 @@ fun ConnectionStatus(
     modifier: Modifier = Modifier
 ) {
     val (color, text) = when (connectionState) {
-        is ConnectionState.Connected -> Color(0xFF4CAF50) to "Connecte"
+        is ConnectionState.Connected -> Color(0xFF4CAF50) to "Connecté"
         is ConnectionState.Connecting -> Color(0xFFFFC107) to "Connexion..."
-        is ConnectionState.Disconnected -> Color(0xFF9E9E9E) to "Deconnecte"
+        is ConnectionState.Reconnecting -> Color(0xFFFF9800) to "Reconnexion #${connectionState.attempt}..."
+        is ConnectionState.Disconnected -> Color(0xFF9E9E9E) to "Déconnecté"
         is ConnectionState.Error -> Color(0xFFF44336) to "Erreur"
     }
 
