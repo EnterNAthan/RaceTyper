@@ -19,6 +19,8 @@ export interface ServerConnectionState {
     players: PlayerData[];
     currentRound: number;
     totalRounds: number;
+    botActive: boolean;
+    botDifficulty?: string;
 }
 
 interface UseServerConnectionProps {
@@ -58,6 +60,8 @@ export const useServerConnection = ({
         players: [],
         currentRound: 0,
         totalRounds: 5,
+        botActive: false,
+        botDifficulty: undefined,
     });
 
     const wsRef = useRef<WebSocket | null>(null);
@@ -210,6 +214,15 @@ export const useServerConnection = ({
                     if (message.message) {
                         alert(message.message);
                     }
+                    break;
+
+                case 'bot_state':
+                    console.log('🤖 Bot state update:', message);
+                    setState(prev => ({
+                        ...prev,
+                        botActive: !!message.active,
+                        botDifficulty: message.difficulty,
+                    }));
                     break;
 
                 case 'error':

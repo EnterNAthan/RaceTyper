@@ -65,6 +65,8 @@ const App: React.FC = () => {
         gameStatus,
         players,
         currentRound,
+        botActive,
+        botDifficulty,
         sendPhraseComplete,
     } = useServerConnection({
         onPhraseReceived: (phrase) => {
@@ -121,19 +123,40 @@ const App: React.FC = () => {
     // Multiplayer flag
     const isMultiplayer = connected;
 
-    // AI opponent settings
+    // AI opponent settings (solo mode)
     const [aiEnabled, setAiEnabled] = useState(false);
     const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('intermediate');
 
     // Countdown state
     const [countdown, setCountdown] = useState<number | null>(null);
 
+    // Map difficulté serveur -> difficulté IA locale
+    const mapServerDifficultyToAI = useCallback((d?: string): AIDifficulty => {
+        switch ((d || '').toLowerCase()) {
+            case 'debutant':
+                return 'beginner';
+            case 'moyen':
+                return 'intermediate';
+            case 'difficile':
+                return 'expert';
+            case 'impossible':
+                return 'impossible';
+            default:
+                return 'intermediate';
+        }
+    }, []);
+
+    const derivedAiEnabled = isMultiplayer ? botActive : aiEnabled;
+    const derivedAiDifficulty: AIDifficulty = isMultiplayer
+        ? mapServerDifficultyToAI(botDifficulty)
+        : aiDifficulty;
+
     const { aiInput, aiProgress, aiErrors, aiCompleted, difficultySettings, aiWPM } = useAIOpponent({
         targetPhrase,
         isGameActive,
         isCompleted,
-        aiEnabled,
-        difficulty: aiDifficulty
+        aiEnabled: derivedAiEnabled,
+        difficulty: derivedAiDifficulty
     });
 
     // Check for game completion (win) - only in solo mode
@@ -479,12 +502,16 @@ const App: React.FC = () => {
                         </section>
 
                         {/* AI opponent display (solo mode only) */}
-                        {aiEnabled && !isMultiplayer && (
+                        {((!isMultiplayer && aiEnabled) || (isMultiplayer && botActive)) && (
                             <section className="typing-card ai-opponent" aria-label="AI opponent">
                                 <div className="ai-header">
                                     <div className="ai-title">
-                                        <span className="ai-label">Opponent</span>
-                                        <span className="ai-difficulty">{difficultySettings.name}</span>
+                                        <span className="ai-label">{isMultiplayer ? 'BOT-IA' : 'Opponent'}</span>
+                                        <span className="ai-difficulty">
+                                            {isMultiplayer && botDifficulty
+                                                ? botDifficulty
+                                                : difficultySettings.name}
+                                        </span>
                                     </div>
                                     <div className="ai-metrics">
                                         <div className="metric">
