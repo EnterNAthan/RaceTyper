@@ -52,6 +52,33 @@
                 </div>
             </section>
 
+            <!-- Section IA / Bot -->
+            <section class="card ia-control">
+                <h2>IA / Bot Joueur</h2>
+                <div class="ia-header">
+                    <span class="ia-label">État du bot :</span>
+                    <span id="iaStatus" class="ia-status badge ia-off">Inactif</span>
+                </div>
+                <div class="ia-controls">
+                    <div class="ia-field">
+                        <label for="iaDifficulty">Niveau d'IA</label>
+                        <select id="iaDifficulty">
+                            <option value="debutant">Débutant</option>
+                            <option value="moyen">Moyen</option>
+                            <option value="difficile">Difficile</option>
+                            <option value="impossible">Impossible</option>
+                        </select>
+                    </div>
+                    <div class="ia-buttons">
+                        <button id="btnIaToggle" class="btn btn-success">Activer l'IA</button>
+                        <button id="btnIaKick" class="btn btn-danger">Kick IA</button>
+                    </div>
+                    <p class="ia-hint">
+                        Le bot IA apparaît comme un joueur spécial <strong>BOT-IA</strong> dans la liste et le classement.
+                    </p>
+                </div>
+            </section>
+
             <!-- Section Joueurs Connectés -->
             <section class="card players">
                 <h2>Joueurs Connectés</h2>

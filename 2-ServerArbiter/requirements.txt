@@ -1,7 +1,11 @@
 fastapi
 uvicorn[standard]  # Le serveur ASGI qui fait tourner FastAPI
-websockets         # Verifie que la BDD est good
+websockets         # Vérification WebSocket
 httpx
-SQLAlchemy #Gestion de la BDD
-numpy # Pour la futur IA 
+SQLAlchemy[asyncio]>=2.0
+asyncpg            # Driver PostgreSQL async
+psycopg2-binary    # Fallback sync (peut échouer encodage Docker)
+pg8000             # Fallback sync alternatif (pur Python, évite UnicodeDecodeError)
+python-dotenv      # Chargement optionnel de .env (DATABASE_URL)
+numpy              # Pour la future IA
 pytest
