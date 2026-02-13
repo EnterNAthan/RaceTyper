@@ -7,15 +7,53 @@ Définit trois catégories de routes :
 - **WebSockets** : connexions temps réel joueurs et admin.
 """
 
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, HTMLResponse
 from .GameManager import GameManager
 from .logger import log_server
 
-app = FastAPI()
-
 manager = GameManager()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialise la BDD au démarrage (asyncpg, ou fallback psycopg2 sous Windows + Docker)."""
+    from .database import (
+        init_db,
+        init_db_sync,
+        get_session_maker,
+        get_sync_engine,
+        wait_for_db,
+        wait_for_db_sync,
+    )
+    ok = False
+    try:
+        await wait_for_db()
+        await init_db()
+        maker = get_session_maker()
+        manager.set_session_factory(maker)
+        await manager.load_phrases_from_db()
+        log_server("BDD PostgreSQL initialisée (asyncpg)", "INFO")
+        ok = True
+    except Exception as e:
+        log_server(f"asyncpg échoué ({e}), tentative avec psycopg2 (sync)...", "WARNING")
+    if not ok:
+        try:
+            await asyncio.to_thread(wait_for_db_sync)
+            await asyncio.to_thread(init_db_sync)
+            sync_eng = get_sync_engine()
+            manager.set_sync_engine(sync_eng)
+            await manager.load_phrases_from_db()
+            log_server("BDD PostgreSQL initialisée (psycopg2, mode sync)", "INFO")
+        except Exception as e:
+            log_server(f"BDD non disponible (mode sans persistance): {e}", "WARNING")
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="server_app/static"), name="static")
 
@@ -46,31 +84,40 @@ async def get_admin_state() -> JSONResponse:
 
 @app.get("/api/admin/export")
 async def export_stats() -> JSONResponse:
-    """Exporte les scores, l'historique et les phrases en JSON.
-
-    Returns:
-        JSONResponse téléchargeable contenant les données complètes.
-    """
-    return JSONResponse(content={
+    """Exporte les scores, l'historique et les phrases en JSON (mémoire + BDD si dispo)."""
+    games_from_db = await manager.get_games_from_db(limit=100)
+    payload = {
         "current_scores": manager.scores,
         "game_history": manager.game_history,
         "phrases": manager.phrases,
         "current_round": manager.current_phrase_index,
-        "game_status": manager.game_status
-    })
+        "game_status": manager.game_status,
+    }
+    if games_from_db:
+        payload["games_from_db"] = games_from_db
+    return JSONResponse(content=payload)
 
 # ==================== ROUTES PUBLIQUES ====================
 
 @app.get("/api/scores")
 async def get_scores() -> JSONResponse:
-    """Fournit l'état actuel des scores à l'application mobile.
-
-    Returns:
-        JSONResponse avec statut 'success' et le dictionnaire des scores.
-    """
+    """Fournit l'état actuel des scores à l'application mobile."""
     scores = await manager.get_current_scores()
-    # Utilise JSONResponse pour un retour propre.
     return JSONResponse(content={"status": "success", "scores": scores})
+
+
+@app.get("/api/games")
+async def get_games(limit: int = 50) -> JSONResponse:
+    """Liste des parties passées (depuis la BDD). Contrat aligné avec l'app mobile (GameSummary)."""
+    games = await manager.get_games_from_db(limit=limit)
+    return JSONResponse(content={"status": "success", "games": games})
+
+
+@app.get("/api/players")
+async def get_players(limit: int = 100) -> JSONResponse:
+    """Liste des joueurs persistés (depuis la BDD). Contrat aligné avec l'app mobile (PlayerProfile)."""
+    players = await manager.get_players_from_db(limit=limit)
+    return JSONResponse(content={"status": "success", "players": players})
 
 # ==================== WEBSOCKET ADMIN ====================
 # IMPORTANT: cette route doit etre AVANT /ws/{client_id} sinon
@@ -142,6 +189,15 @@ async def admin_websocket(websocket: WebSocket) -> None:
 
             elif command == "kick_all":
                 await manager.kick_all_players()
+
+            elif command == "ia_set_state":
+                # Commande pour activer/désactiver le bot IA et changer sa difficulté
+                active = data.get("active", False)
+                difficulty = data.get("difficulty")
+                await manager.set_bot_state(bool(active), difficulty)
+
+            elif command == "ia_kick":
+                await manager.kick_bot()
 
             elif command == "broadcast_message":
                 message = data.get("message")
