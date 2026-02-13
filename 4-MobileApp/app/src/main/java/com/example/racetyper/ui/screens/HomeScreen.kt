@@ -92,7 +92,8 @@ fun HomeScreen(
                             GameStatus.WAITING -> "EN ATTENTE"
                             GameStatus.PLAYING -> "COURSE EN COURS"
                             GameStatus.PAUSED -> "PAUSE"
-                            GameStatus.FINISHED -> "TERMINE"
+                            GameStatus.FINISHED -> "TERMINÉ"
+                            GameStatus.GAME_OVER -> "PARTIE TERMINÉE"
                         },
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,

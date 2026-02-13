@@ -10,7 +10,9 @@ import com.example.racetyper.data.model.Player
 import com.example.racetyper.data.model.RoundClassement
 import com.example.racetyper.data.repository.GameRepository
 import com.example.racetyper.data.websocket.ConnectionState
+import com.example.racetyper.data.websocket.GameEvent
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +27,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val gameState: StateFlow<GameState> = repository.gameState
     val scores: StateFlow<Map<String, Int>> = repository.scores
     val lastRoundClassement: StateFlow<RoundClassement?> = repository.lastRoundClassement
+
+    /** Événements ponctuels — collectHere via LaunchedEffect dans Compose. */
+    val events: SharedFlow<GameEvent> = repository.events
 
     val serverUrl: StateFlow<String> = settingsManager.serverUrl
         .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_SERVER_URL)
@@ -70,6 +75,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
-        repository.disconnect()
+        repository.destroy()
     }
 }
