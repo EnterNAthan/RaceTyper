@@ -8,6 +8,10 @@ import random
 import time
 import asyncio
 from .logger import log_websocket, log_server
+from .PhraseGenerator import PhraseGenerator
+import asyncio
+from typing import Dict, Any
+
 
 
 class GameManager:
@@ -32,6 +36,11 @@ class GameManager:
         self.active_players: dict = {}
         self.scores: dict[str, int] = {}
         self.object_manager = ObjectManager()
+        # Générateur de phrases IA (Ollama)
+        self.phrase_generator = PhraseGenerator(
+            ollama_url="http://localhost:11434",
+            model="llama2"  # ou "mistral", "codellama", etc.
+        )
 
         self.phrases: list[str] = [
             "Le rapide renard brun saute par-dessus ^le^ ^chien^ ^paresseux^",
@@ -47,6 +56,7 @@ class GameManager:
         self.admin_connections: list = []
         self.game_status: str = "waiting"
         self.game_history: list[dict] = []
+        self.ai_bots: dict = {}
 
     # --- Gestion des Connexions ---
 
@@ -501,6 +511,7 @@ class GameManager:
         await self.notify_admins_state_change()
 
     async def delete_phrase(self, index: int) -> None:
+
         """Supprime une phrase par son index et ajuste l'index courant si nécessaire.
 
         Args:
@@ -516,6 +527,73 @@ class GameManager:
 
             await self.notify_admins_state_change()
 
+    async def generate_phrase_with_ai(
+        self, 
+        theme: str = None,
+        difficulty: str = "medium",
+        add_objects: bool = True
+    ) -> str:
+        """Génère une nouvelle phrase via Ollama et l'ajoute à la liste.
+        
+        Args:
+            theme: Thème de la phrase (optionnel).
+            difficulty: Niveau de difficulté ("easy", "medium", "hard").
+            add_objects: Ajouter des balises bonus/malus.
+            
+        Returns:
+            La phrase générée.
+            
+        Raises:
+            Exception: Si la génération échoue.
+        """
+        phrase = await self.phrase_generator.generate_phrase(theme, difficulty, add_objects)
+        await self.add_phrase(phrase)
+        return phrase
+
+    async def generate_multiple_phrases_with_ai(
+        self,
+        count: int = 5,
+        theme: str = None,
+        difficulty: str = "medium",
+        add_objects: bool = True
+    ) -> list[str]:
+        """Génère plusieurs phrases d'un coup via Ollama.
+        
+        Args:
+            count: Nombre de phrases à générer.
+            theme: Thème commun (optionnel).
+            difficulty: Niveau de difficulté.
+            add_objects: Ajouter des objets bonus/malus.
+            
+        Returns:
+            Liste des phrases générées et ajoutées.
+        """
+        phrases = await self.phrase_generator.generate_multiple_phrases(
+            count, theme, difficulty, add_objects
+        )
+        
+        for phrase in phrases:
+            self.phrases.append(phrase)
+        
+        log_server(f"{len(phrases)} phrases IA ajoutées", "INFO")
+        await self.notify_admins_state_change()
+        
+        return phrases
+
+    async def check_ai_available(self) -> dict:
+        """Vérifie si Ollama est disponible et opérationnel.
+        
+        Returns:
+            Dictionnaire avec le statut et les infos.
+        """
+        is_available = await self.phrase_generator.check_ollama_available()
+        
+        return {
+            "available": is_available,
+            "url": self.phrase_generator.ollama_url,
+            "model": self.phrase_generator.model
+        }
+  
     # --- State Query Methods ---
 
     async def get_game_state(self) -> dict:
@@ -617,6 +695,7 @@ class GameManager:
         })
 
     async def broadcast_admin_message(self, message: str) -> None:
+        
         """Diffuse un message de l'arbitre à tous les joueurs.
 
         Args:
@@ -628,3 +707,112 @@ class GameManager:
             "message": message
         })
         await self.send_log_to_admins(f"Message diffusé: {message}", "info")
+
+    # --- Gestion AI_Agent ---
+
+    async def add_ai_bot(self, bot_id: str = None, typing_speed: float = 0.05) -> str:
+        """Ajoute un bot IA à la partie.
+        
+        Args:
+            bot_id: Identifiant du bot (auto-généré si None)
+            typing_speed: Vitesse de frappe du bot (secondes/caractère)
+            
+        Returns:
+            L'ID du bot ajouté
+            
+        Raises:
+            ValueError: Si l'ID du bot est déjà utilisé
+        """
+        # Import local pour éviter les dépendances circulaires
+        try:
+            from .ai_player_client import AIPlayerClient
+        except ImportError:
+            log_server("❌ Erreur: Module ai_player_client introuvable", "ERROR")
+            raise ImportError("Le module ai_player_client n'est pas disponible")
+        
+        # Générer un ID unique si non fourni
+        if bot_id is None:
+            bot_number = len([cid for cid in self.ai_bots.keys() if cid.startswith("bot-")]) + 1
+            bot_id = f"bot-{bot_number}"
+        
+        # ✅ CORRECTION: Utiliser active_players au lieu de connections
+        if bot_id in self.active_players or bot_id in self.ai_bots:
+            log_server(f"❌ Bot ID '{bot_id}' déjà utilisé", "ERROR")
+            raise ValueError(f"Bot ID '{bot_id}' déjà utilisé")
+        
+        log_server(f"🤖 Ajout du bot IA: {bot_id} (vitesse: {typing_speed}s/char)", "INFO")
+        
+        # Créer le bot
+        bot = AIPlayerClient(
+            client_id=bot_id,
+            server_url="ws://localhost:8080",
+            ai_inference_url="http://localhost:8000",
+            typing_delay=typing_speed
+        )
+        
+        # Lancer le bot dans une tâche asynchrone
+        bot_task = asyncio.create_task(bot.run())
+        self.ai_bots[bot_id] = {"client": bot, "task": bot_task}
+        
+        # Attendre un peu pour que le bot se connecte
+        await asyncio.sleep(0.5)
+        
+        # Notifier les admins
+        await self.notify_admins_state_change()
+        
+        return bot_id
+    
+    async def remove_ai_bot(self, bot_id: str):
+        """Retire un bot IA de la partie.
+        
+        Args:
+            bot_id: Identifiant du bot à retirer
+            
+        Raises:
+            ValueError: Si le bot n'existe pas
+        """
+        if bot_id not in self.ai_bots:
+            log_server(f"❌ Bot '{bot_id}' introuvable", "ERROR")
+            raise ValueError(f"Bot '{bot_id}' introuvable")
+        
+        log_server(f"🤖 Retrait du bot IA: {bot_id}", "INFO")
+        
+        bot_data = self.ai_bots[bot_id]
+        bot_client = bot_data["client"]
+        bot_task = bot_data["task"]
+        
+        # Déconnecter le bot
+        await bot_client.disconnect()
+        
+        # Annuler la tâche
+        bot_task.cancel()
+        try:
+            await bot_task
+        except asyncio.CancelledError:
+            pass  # C'est normal, on a annulé la tâche
+        
+        # Retirer de la liste
+        del self.ai_bots[bot_id]
+        
+        # ✅ CORRECTION: Utiliser active_players au lieu de connections
+        if bot_id in self.active_players:
+            await self.disconnect(bot_id)  # ⚠️ Vérifiez le nom de la méthode de déconnexion
+        
+        # Notifier les admins
+        await self.notify_admins_state_change()
+    
+    async def get_ai_bots_info(self) -> list:
+        """Retourne la liste des bots IA actifs.
+        
+        Returns:
+            Liste de dictionnaires avec les infos des bots
+        """
+        bots_info = []
+        for bot_id, bot_data in self.ai_bots.items():
+            bot_client = bot_data["client"]
+            bots_info.append({
+                "id": bot_id,
+                "is_connected": bot_client.is_running,
+                "typing_speed": bot_client.typing_delay
+            })
+        return bots_info

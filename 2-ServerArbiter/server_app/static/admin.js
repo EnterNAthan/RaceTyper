@@ -529,10 +529,116 @@ class AdminDashboard {
             this.sendCommand('delete_phrase', { index });
         }
     }
+
+     //modif ai bot
+    
+    async addBot() {
+        const speedSelect = document.getElementById('botSpeed');
+        const typingSpeed = parseFloat(speedSelect.value);
+        
+        try {
+            const response = await fetch('/api/admin/bot/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ typing_speed: typingSpeed })
+            });
+            
+            const data = await response.json();
+            
+            if (data.status === 'ok') {
+                this.addLog(`✅ Bot ${data.bot_id} ajouté`, 'server-info');
+            } else {
+                this.addLog(`❌ Erreur: ${data.message}`, 'server-error');
+            }
+        } catch (error) {
+            this.addLog(`❌ Erreur réseau: ${error}`, 'server-error');
+        }
+    }
+    
+    async removeBot(botId) {
+        if (!confirm(`Retirer le bot ${botId} ?`)) return;
+        
+        try {
+            const response = await fetch(`/api/admin/bot/${botId}`, {
+                method: 'DELETE'
+            });
+            
+            const data = await response.json();
+            
+            if (data.status === 'ok') {
+                this.addLog(`✅ Bot ${botId} retiré`, 'server-info');
+            } else {
+                this.addLog(`❌ Erreur: ${data.message}`, 'server-error');
+            }
+        } catch (error) {
+            this.addLog(`❌ Erreur réseau: ${error}`, 'server-error');
+        }
+    }
+    
+    updateBotsList(bots) {
+        const botsList = document.getElementById('botsList');
+        if (!botsList) return;
+        
+        if (!bots || bots.length === 0) {
+            botsList.innerHTML = '<p class="no-data">Aucun bot actif</p>';
+            return;
+        }
+        
+        botsList.innerHTML = bots.map(bot => `
+            <div class="bot-item">
+                <span class="bot-name">🤖 ${bot.id}</span>
+                <span class="bot-speed">${(bot.typing_speed * 1000).toFixed(0)}ms/char</span>
+                <span class="bot-status ${bot.is_connected ? 'connected' : 'disconnected'}">
+                    ${bot.is_connected ? '✅' : '❌'}
+                </span>
+                <button onclick="adminManager.removeBot('${bot.id}')" class="btn-danger btn-small">
+                    🗑️ Retirer
+                </button>
+            </div>
+        `).join('');
+    }
+    
+    // Modifiez la méthode onMessage pour gérer les bots
+    onMessage(event) {
+        const data = JSON.parse(event.data);
+        this.addLog(`← ${data.type}`, 'ws-in');
+
+        switch (data.type) {
+            case 'state_update':
+                this.updateGameState(data);
+
+                if (data.players !== undefined) {
+                    this.updatePlayers(data.players, data.scores);
+                }
+                if (data.phrases !== undefined) {
+                    const currentIndex = data.current_phrase_index ?? data.current_index;
+                    this.updatePhrasesList(data.phrases, currentIndex);
+                }
+                if (data.scores !== undefined) {
+                    const ranking = Object.entries(data.scores)
+                        .sort((a, b) => (b[1] || 0) - (a[1] || 0))
+                        .map(([client_id, score]) => ({ client_id, score }));
+                    this.updateRanking(ranking);
+                }
+                // AJOUT: Mise à jour des bots
+                if (data.bots !== undefined) {
+                    this.updateBotsList(data.bots);
+                }
+                break;
+            // ... autres cas ...
+        }
+    }
 }
 
 // Initialize dashboard when page loads
 let dashboard;
+
 document.addEventListener('DOMContentLoaded', () => {
     dashboard = new AdminDashboard();
+    
+    // Rendre accessible sous les deux noms pour compatibilité
+    window.dashboard = dashboard;
+    window.adminManager = dashboard;  // Alias pour le HTML qui utilise adminManager
+    
+    console.log('✅ AdminDashboard initialisé');
 });

@@ -1242,3 +1242,58 @@ header h1::before {
 header h1 {
     animation: neonFlicker 8s infinite;
 }
+
+
+.bot-management {
+    margin-top: 1rem;
+}
+
+.bot-controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.bot-speed-control select {
+    padding: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-dark);
+    color: var(--text-color);
+}
+
+.bots-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.bot-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    background: var(--bg-dark);
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+
+.bot-name {
+    font-weight: 600;
+    flex: 1;
+}
+
+.bot-speed {
+    color: var(--secondary-color);
+    font-size: 0.9rem;
+}
+
+.bot-status {
+    font-size: 1.2rem;
+}
+
+.btn-small {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.85rem;
+}

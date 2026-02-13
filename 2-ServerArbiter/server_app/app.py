@@ -10,14 +10,33 @@ Définit trois catégories de routes :
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware  
+from pydantic import BaseModel  
+from typing import Optional  
 from .GameManager import GameManager
 from .logger import log_server
 
+
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 manager = GameManager()
 
 app.mount("/static", StaticFiles(directory="server_app/static"), name="static")
+
+# ==================== MODÈLES PYDANTIC ====================
+
+class AddBotRequest(BaseModel):
+    """Requête pour ajouter un bot IA."""
+    bot_id: Optional[str] = None
+    typing_speed: float = 0.05
 
 # ==================== ROUTES ADMIN ====================
 
@@ -59,6 +78,105 @@ async def export_stats() -> JSONResponse:
         "game_status": manager.game_status
     })
 
+
+# ==================== ROUTES GESTION BOTS IA ====================
+
+@app.post("/api/admin/bot/add")
+async def add_bot(request: AddBotRequest) -> JSONResponse:
+    """Ajoute un bot IA à la partie.
+    
+    Args:
+        request: Requête contenant l'ID du bot (optionnel) et sa vitesse de frappe
+    
+    Returns:
+        JSONResponse avec l'ID du bot ajouté ou une erreur
+    """
+    try:
+        log_server(f"Requête d'ajout de bot: {request.bot_id}, vitesse: {request.typing_speed}", "INFO")
+        added_bot_id = await manager.add_ai_bot(request.bot_id, request.typing_speed)
+        return JSONResponse(content={
+            "status": "ok",
+            "bot_id": added_bot_id,
+            "message": f"Bot {added_bot_id} ajouté avec succès"
+        })
+    except ValueError as e:
+        log_server(f"Erreur validation bot: {e}", "ERROR")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        log_server(f"Erreur ajout bot: {e}", "ERROR")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Erreur serveur: {str(e)}"
+            }
+        )
+
+@app.delete("/api/admin/bot/{bot_id}")
+async def remove_bot(bot_id: str) -> JSONResponse:
+    """Retire un bot IA de la partie.
+    
+    Args:
+        bot_id: Identifiant du bot à retirer
+    
+    Returns:
+        JSONResponse confirmant la suppression ou une erreur
+    """
+    try:
+        log_server(f"Requête de retrait de bot: {bot_id}", "INFO")
+        await manager.remove_ai_bot(bot_id)
+        return JSONResponse(content={
+            "status": "ok",
+            "message": f"Bot {bot_id} retiré avec succès"
+        })
+    except ValueError as e:
+        log_server(f"Bot {bot_id} introuvable", "ERROR")
+        return JSONResponse(
+            status_code=404,
+            content={
+                "status": "error",
+                "message": str(e)
+            }
+        )
+    except Exception as e:
+        log_server(f"Erreur retrait bot {bot_id}: {e}", "ERROR")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Erreur serveur: {str(e)}"
+            }
+        )
+
+@app.get("/api/admin/bots")
+async def list_bots() -> JSONResponse:
+    """Liste tous les bots IA actifs.
+    
+    Returns:
+        JSONResponse avec la liste des bots et leurs informations
+    """
+    try:
+        bots = await manager.get_ai_bots_info()
+        return JSONResponse(content={
+            "status": "ok",
+            "bots": bots,
+            "count": len(bots)
+        })
+    except Exception as e:
+        log_server(f"Erreur liste bots: {e}", "ERROR")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Erreur serveur: {str(e)}"
+            }
+        )
 # ==================== ROUTES PUBLIQUES ====================
 
 @app.get("/api/scores")
@@ -157,6 +275,54 @@ async def admin_websocket(websocket: WebSocket) -> None:
                 index = data.get("index")
                 if index is not None:
                     await manager.delete_phrase(index)
+                elif command == "generate_phrase":
+                    theme = data.get("theme")
+                    difficulty = data.get("difficulty", "medium")
+                    add_objects = data.get("add_objects", True)
+                    
+                    try:
+                        phrase = await manager.generate_phrase_with_ai(theme, difficulty, add_objects)
+                        await websocket.send_json({
+                            "type": "phrase_generated",
+                            "phrase": phrase,
+                            "success": True
+                        })
+                    except Exception as e:
+                        await websocket.send_json({
+                            "type": "phrase_generated",
+                            "success": False,
+                            "error": str(e)
+                        })
+
+                elif command == "generate_multiple_phrases":
+                    count = data.get("count", 5)
+                    theme = data.get("theme")
+                    difficulty = data.get("difficulty", "medium")
+                    add_objects = data.get("add_objects", True)
+                    
+                    try:
+                        phrases = await manager.generate_multiple_phrases_with_ai(
+                            count, theme, difficulty, add_objects
+                        )
+                        await websocket.send_json({
+                            "type": "phrases_generated",
+                            "phrases": phrases,
+                            "count": len(phrases),
+                            "success": True
+                        })
+                    except Exception as e:
+                        await websocket.send_json({
+                            "type": "phrases_generated",
+                            "success": False,
+                            "error": str(e)
+                        })
+
+                elif command == "check_ai":
+                    status = await manager.check_ai_available()
+                    await websocket.send_json({
+                        "type": "ai_status",
+                        "status": status
+                    })
 
             else:
                 log_server(f"Commande admin inconnue: {command}", "WARNING")

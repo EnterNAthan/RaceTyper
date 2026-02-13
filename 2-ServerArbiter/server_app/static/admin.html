@@ -111,6 +111,29 @@
                 </div>
             </section>
 
+            <!-- Section Gestion des Bots IA -->
+            <section class="card bot-management">
+                <h2>🤖 Bots IA</h2>
+                <div class="bot-controls">
+                    <button onclick="adminManager.addBot()" class="btn-success">
+                        ➕ Ajouter Bot IA
+                    </button>
+                    <div class="bot-speed-control">
+                        <label>Vitesse:
+                            <select id="botSpeed">
+                                <option value="0.03">Rapide (0.03s)</option>
+                                <option value="0.05" selected>Normal (0.05s)</option>
+                                <option value="0.08">Lent (0.08s)</option>
+                                <option value="0.15">Très lent (0.15s)</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+                <div id="botsList" class="bots-list">
+                    <!-- Les bots seront affichés ici -->
+                </div>
+            </section>
+
             <!-- Section Actions Rapides -->
             <section class="card quick-actions">
                 <h2>Actions Rapides</h2>
