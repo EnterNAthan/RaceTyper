@@ -63,6 +63,9 @@ class GameManager:
         self._sync_session_factory = None
         self.current_game_id: int | None = None
 
+        # Verrou pour éviter les race conditions lors du traitement de fin de manche
+        self._round_processing_lock = None
+
     def set_session_factory(self, session_maker):
         """Injecte la factory de sessions async (appelé au démarrage si BDD dispo)."""
         self._session_maker = session_maker
@@ -618,84 +621,109 @@ class GameManager:
                 # NON. On attend encore des joueurs.
                 pass
 
+    def _ensure_round_lock_initialized(self):
+        """Initialise le verrou de manche s'il ne l'est pas déjà."""
+        if self._round_processing_lock is None:
+            self._round_processing_lock = asyncio.Lock()
+
     async def process_round_end(self) -> None:
         """Clôture une manche : calcule le classement, met à jour les scores,
         puis lance automatiquement la manche suivante (ou termine le jeu).
+        
+        Utilise un verrou pour éviter les race conditions (appels simultanés).
         """
-        log_server("Fin de la manche ! Calcul du classement...")
+        # Initialiser le verrou s'il ne l'est pas encore
+        self._ensure_round_lock_initialized()
         
-        # Trier les résultats pour obtenir le classement (le plus rapide en premier)
-        # item[0] = client_id, item[1] = data (résumé de la phrase)
-        sorted_results = sorted(
-            self.current_round_results.items(), 
-            key=lambda item: item[1].get("time_taken", 99)
-        )
-        
-        classement_data = []
-        
-        # Parcourir le classement pour attribuer les points et les effets
-        for i, (client_id, data) in enumerate(sorted_results):
-            rank = i + 1
+        # Acquisition du verrou pour éviter que process_round_end soit appelée 2 fois simultanément
+        async with self._round_processing_lock:
+            log_server("Fin de la manche ! Calcul du classement...")
             
-            # Attribuer des points en fonction du classement
-            points_de_classement = max(0, 1000 - (rank * 200)) # Ex: 1er=800, 2e=600...
-            self.scores[client_id] += points_de_classement
+            # Trier les résultats pour obtenir le classement (le plus rapide en premier)
+            # item[0] = client_id, item[1] = data (résumé de la phrase)
+            sorted_results = sorted(
+                self.current_round_results.items(), 
+                key=lambda item: item[1].get("time_taken", 99)
+            )
             
-            # Gérer les bonus/malus de la phrase (comme avant)
-            triggered_objects = data.get("objects_triggered", [])
-            await self.apply_effects(client_id, triggered_objects) # Applique les effets (bonus/malus)
+            classement_data = []
             
-            # Construire l'objet de classement à envoyer aux joueurs
-            classement_data.append({
-                "rank": rank,
-                "client_id": client_id,
-                "time": data.get("time_taken"),
-                "score_added": points_de_classement 
+            # Parcourir le classement pour attribuer les points et les effets
+            for i, (client_id, data) in enumerate(sorted_results):
+                rank = i + 1
+                
+                # Attribuer des points en fonction du classement
+                points_de_classement = max(0, 1000 - (rank * 200)) # Ex: 1er=800, 2e=600...
+                if client_id in self.scores:  # Vérifier que le joueur n'a pas été déconnecté
+                    self.scores[client_id] += points_de_classement
+                
+                # Gérer les bonus/malus de la phrase (comme avant)
+                triggered_objects = data.get("objects_triggered", [])
+                await self.apply_effects(client_id, triggered_objects) # Applique les effets (bonus/malus)
+                
+                # Construire l'objet de classement à envoyer aux joueurs
+                classement_data.append({
+                    "rank": rank,
+                    "client_id": client_id,
+                    "time": data.get("time_taken"),
+                    "score_added": points_de_classement 
+                })
+
+            # 3. Persister les résultats de la manche en BDD (avec gestion d'erreur)
+            try:
+                await self._save_round_results(self.current_phrase_index)
+            except Exception as e:
+                log_server(f"Erreur lors de la sauvegarde des résultats: {e}", "WARNING")
+                # Continuer malgré tout pour que les scores soient diffusés aux joueurs
+
+            # 4. Envoyer le classement de la manche ET les scores globaux à tout le monde
+            await self.broadcast({
+                "type": "round_classement", 
+                "classement": classement_data,
+                "global_scores": self.scores
             })
+            
+            # 4a. Forcer une actualisation du scoreboard avec le message player_update
+            await self.broadcast({"type": "player_update", "scores": self.scores})
+            
+            # Attendre 3 secondes pour que les joueurs voient le classement (réduit de 5 à 3)
+            await asyncio.sleep(3) 
+            
+            # Préparer la manche suivante
+            self.current_phrase_index += 1
+            
+            # Vérifier si le jeu est terminé
+            if self.current_phrase_index >= len(self.phrases):
+                # JEU TERMINÉ
+                log_server("JEU TERMINE !", "INFO")
+                await self._finish_game_in_db()
+                await self.broadcast({"type": "game_over", "final_scores": self.scores})
+                # Réinitialiser le jeu
+                self.current_phrase_index = 0
+                self.current_round_results = {}
+                self.scores = {pid: 0 for pid in self.active_players.keys()} # Reset scores
+                self.game_status = "waiting"
+                self.current_game_id = None
+                await self.notify_admins_state_change()
+                return
 
-        # 3. Persister les résultats de la manche en BDD
-        await self._save_round_results(self.current_phrase_index)
+            # Vérifier que le jeu est toujours "playing" (peut avoir été arrêté entre-temps)
+            if self.game_status != "playing":
+                log_server("Jeu n'est plus en mode 'playing', arrêt du traitement de manche", "WARNING")
+                return
 
-        # 4. Envoyer le classement de la manche ET les scores globaux à tout le monde
-        await self.broadcast({
-            "type": "round_classement", 
-            "classement": classement_data,
-            "global_scores": self.scores
-        })
-        
-        # Attendre 5 secondes pour que les joueurs voient le classement
-        await asyncio.sleep(5) 
-        
-        # Préparer la manche suivante
-        self.current_phrase_index += 1
-        
-        # Vérifier si le jeu est terminé
-        if self.current_phrase_index >= len(self.phrases):
-            # JEU TERMINÉ
-            log_server("JEU TERMINE !", "INFO")
-            await self._finish_game_in_db()
-            await self.broadcast({"type": "game_over", "final_scores": self.scores})
-            # Réinitialiser le jeu
-            self.current_phrase_index = 0
-            self.current_round_results = {}
-            self.scores = {pid: 0 for pid in self.active_players.keys()} # Reset scores
-            self.game_status = "waiting"
-            self.current_game_id = None
+            # Lancer la manche suivante
+            log_server(f"Lancement de la manche {self.current_phrase_index + 1}")
+            self.current_round_results = {} # Vider les résultats pour la nouvelle manche
+            new_phrase = self.phrases[self.current_phrase_index]
+            await self.broadcast({"type": "new_phrase", "phrase": new_phrase, "round_number": self.current_phrase_index})
+
+            # Lancer la simulation du bot IA pour la nouvelle manche
+            if self.bot_active:
+                asyncio.create_task(self.simulate_bot_round(new_phrase))
+
+            # Notifier l'interface admin du changement de manche et d'état
             await self.notify_admins_state_change()
-            return
-
-        # Lancer la manche suivante
-        log_server(f"Lancement de la manche {self.current_phrase_index + 1}")
-        self.current_round_results = {} # Vider les résultats pour la nouvelle manche
-        new_phrase = self.phrases[self.current_phrase_index]
-        await self.broadcast({"type": "new_phrase", "phrase": new_phrase, "round_number": self.current_phrase_index})
-
-        # Lancer la simulation du bot IA pour la nouvelle manche
-        if self.bot_active:
-            asyncio.create_task(self.simulate_bot_round(new_phrase))
-
-        # Notifier l'interface admin du changement de manche et d'état
-        await self.notify_admins_state_change()
 
     # (J'ai supprimé calculate_score car s score est maintenant basé sur le classement)
 
@@ -708,23 +736,28 @@ class GameManager:
         """
         for obj in objects:
             if obj.get("type") == "bonus" and obj.get("success"):
-                # Appliquer un bonus
-                bonus_points = self.object_manager.get_bonus_effect()
-                self.scores[client_id] += bonus_points
-                log_server(f"Joueur {client_id} gagne {bonus_points} points bonus!", "DEBUG")
+                # Appliquer un bonus (vérifier que le joueur n'a pas été déconnecté)
+                if client_id in self.scores:
+                    bonus_points = self.object_manager.get_bonus_effect()
+                    self.scores[client_id] += bonus_points
+                    log_server(f"Joueur {client_id} gagne {bonus_points} points bonus!", "DEBUG")
+                else:
+                    log_server(f"Joueur {client_id} bonus non appliqué (joueur déconnecté)", "WARNING")
                 
             elif obj.get("type") == "malus" and obj.get("success"):
                 # Appliquer un malus (sur un adversaire aléatoire)
                 effect = self.object_manager.get_malus_effect()
                 target_player = self.get_random_opponent(client_id)
                 
-                if target_player:
+                if target_player and target_player in self.active_players:
                     log_server(f"Joueur {client_id} envoie un malus '{effect}' à {target_player}!", "DEBUG")
                     # Envoyer la commande d'action hardware au Pi de l'adversaire
                     await self.send_to_client(target_player, {
                         "type": "hardware_action", 
                         "action": effect
                     })
+                else:
+                    log_server(f"Malus de {client_id} non envoyé (adversaire cible déconnecté)", "WARNING")
 
     def get_new_phrase(self) -> str:
         """Retourne une phrase choisie aléatoirement parmi celles disponibles.
