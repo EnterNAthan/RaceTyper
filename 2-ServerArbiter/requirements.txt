@@ -3,5 +3,6 @@ uvicorn[standard]  # Le serveur ASGI qui fait tourner FastAPI
 websockets         # Verifie que la BDD est good
 httpx
 SQLAlchemy #Gestion de la BDD
+paho-mqtt          # Bridge MQTT vers les consoles Raspberry Pi
 numpy # Pour la futur IA 
 pytest

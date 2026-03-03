@@ -4,6 +4,7 @@ et l'interface admin via WebSocket.
 """
 
 from .ObjectManager import ObjectManager
+from .mqtt_bridge import MQTTBridge, ALLOWED_MALUS_TYPES
 import random
 import time
 import asyncio
@@ -30,8 +31,10 @@ class GameManager:
 
     def __init__(self) -> None:
         self.active_players: dict = {}
+        self.spectators: dict = {}  # Connexions mobiles (ne participent pas aux manches)
         self.scores: dict[str, int] = {}
         self.object_manager = ObjectManager()
+        self._mqtt: MQTTBridge | None = None
 
         self.phrases: list[str] = [
             "Le rapide renard brun saute par-dessus ^le^ ^chien^ ^paresseux^",
@@ -48,18 +51,32 @@ class GameManager:
         self.game_status: str = "waiting"
         self.game_history: list[dict] = []
 
+    def set_mqtt_bridge(self, bridge: MQTTBridge) -> None:
+        """Injecte le client MQTT (appelé au démarrage de l'app)."""
+        self._mqtt = bridge
+
     # --- Gestion des Connexions ---
 
     async def connect(self, websocket, client_id: str) -> None:
-        """Enregistre un nouveau joueur et lui envoie l'état courant.
+        """Enregistre un joueur ou un spectateur et lui envoie l'état courant.
+
+        Les clients dont l'id commence par 'mobile' ou contient '-spectator'
+        sont des spectateurs : ils reçoivent les événements mais ne sont
+        pas attendus pour clore une manche.
 
         Args:
-            websocket: Connexion WebSocket du joueur.
-            client_id: Identifiant unique du joueur (ex. 'pi-1').
+            websocket: Connexion WebSocket du client.
+            client_id: Identifiant unique du client dans l'URL (ex. 'pi-1', 'mobile-spectator').
         """
-        self.active_players[client_id] = websocket
-        self.scores[client_id] = 0
-        log_server(f"Joueur {client_id} Connecté. Total: {len(self.active_players)} joueurs.", "DEBUG")
+        is_spectator = client_id.startswith("mobile") or "-spectator" in client_id
+
+        if is_spectator:
+            self.spectators[client_id] = websocket
+            log_server(f"Spectateur {client_id} connecté. Total: {len(self.spectators)} spectateurs.", "DEBUG")
+        else:
+            self.active_players[client_id] = websocket
+            self.scores[client_id] = 0
+            log_server(f"Joueur {client_id} Connecté. Total: {len(self.active_players)} joueurs.", "DEBUG")
 
         # Envoyer d'abord le message de confirmation de connexion
         await self.send_to_client(client_id, {
@@ -89,18 +106,22 @@ class GameManager:
         await self.notify_admins_state_change()
 
     async def disconnect(self, client_id: str) -> None:
-        """Retire un joueur de l'état et notifie les autres.
+        """Retire un joueur ou spectateur de l'état et notifie les autres.
 
         Args:
-            client_id: Identifiant du joueur déconnecté.
+            client_id: Identifiant du client déconnecté.
         """
-        if client_id in self.active_players:
+        if client_id in self.spectators:
+            del self.spectators[client_id]
+            log_server(f"Spectateur {client_id} déconnecté.", "DEBUG")
+        elif client_id in self.active_players:
             del self.active_players[client_id]
-        if client_id in self.scores:
-            del self.scores[client_id]
-        if client_id in self.current_round_results:
-            del self.current_round_results[client_id] # Le retire de la manche en cours
-        log_server(f"Joueur {client_id} Déconnecté.", "DEBUG")
+            if client_id in self.scores:
+                del self.scores[client_id]
+            if client_id in self.current_round_results:
+                del self.current_round_results[client_id]
+            log_server(f"Joueur {client_id} déconnecté.", "DEBUG")
+
         await self.broadcast({"type": "player_update", "scores": self.scores})
 
         # Mettre à jour le tableau de bord admin
@@ -117,21 +138,29 @@ class GameManager:
         # Log l'envoi (une seule fois)
         log_websocket("TOUS", "OUT", message)
 
-        # Envoyer à tous les joueurs, en ignorant les connexions fermées
-        disconnected = []
-        for client_id, ws in self.active_players.items():
+        # Envoyer à tous les joueurs ET spectateurs
+        all_connections = {**self.active_players, **self.spectators}
+        disconnected_players = []
+        disconnected_spectators = []
+        for client_id, ws in all_connections.items():
             try:
                 await ws.send_json(message)
             except Exception as e:
                 log_server(f"Erreur lors de l'envoi à {client_id}: {e}", "WARNING")
-                disconnected.append(client_id)
+                if client_id in self.active_players:
+                    disconnected_players.append(client_id)
+                else:
+                    disconnected_spectators.append(client_id)
 
         # Nettoyer les connexions mortes (sans appeler disconnect pour éviter la récursion)
-        for client_id in disconnected:
+        for client_id in disconnected_players:
             if client_id in self.active_players:
                 del self.active_players[client_id]
             if client_id in self.scores:
                 del self.scores[client_id]
+        for client_id in disconnected_spectators:
+            if client_id in self.spectators:
+                del self.spectators[client_id]
             
     async def send_to_client(self, client_id: str, message: dict) -> None:
         """Envoie un message JSON à un seul joueur ciblé.
@@ -166,7 +195,12 @@ class GameManager:
         """
         
         action = data.get("action")
-        
+
+        if action == "send_malus":
+            # ── Game Master (app mobile) envoie un malus à un joueur ──
+            await self._handle_send_malus(client_id, data)
+            return
+
         if action == "phrase_finished":
             # 1. Le Pi a fini la phrase. On stocke son résultat pour CETTE manche.
             log_server(f"Résultat de manche reçu de {client_id}", "DEBUG")
@@ -184,6 +218,61 @@ class GameManager:
             else:
                 # NON. On attend encore des joueurs.
                 pass
+
+    async def _handle_send_malus(self, sender_id: str, data: dict) -> None:
+        """Traite un message ``send_malus`` reçu d'un spectateur (app mobile).
+
+        Valide la requête puis publie le malus sur le topic MQTT du joueur
+        cible pour que sa console Raspberry Pi l'applique.
+
+        Payload attendu::
+
+            {
+                "action": "send_malus",
+                "target_player_id": "pi-1",
+                "malus_type": "disable_keyboard"
+            }
+
+        Args:
+            sender_id: Identifiant du client émetteur (ex. 'mobile-spectator').
+            data: Message JSON brut reçu via WebSocket.
+        """
+        target_id = data.get("target_player_id")
+        malus_type = data.get("malus_type")
+
+        # ── Validation ──
+        if not target_id or not malus_type:
+            log_server(f"send_malus incomplet de {sender_id}: {data}", "WARNING")
+            return
+
+        if malus_type not in ALLOWED_MALUS_TYPES:
+            log_server(f"send_malus type inconnu '{malus_type}' de {sender_id}", "WARNING")
+            return
+
+        if target_id not in self.active_players:
+            log_server(f"send_malus cible '{target_id}' non connectée (de {sender_id})", "WARNING")
+            return
+
+        # ── Publication MQTT vers la console Pi ──
+        if self._mqtt is not None:
+            ok = self._mqtt.publish_malus(target_id, malus_type, source=sender_id)
+            if ok:
+                log_server(
+                    f"Malus '{malus_type}' → {target_id} via MQTT (source: {sender_id})",
+                    "INFO",
+                )
+            else:
+                log_server(f"Échec MQTT pour malus '{malus_type}' → {target_id}", "WARNING")
+        else:
+            log_server("MQTT bridge non configuré, malus non transmis", "WARNING")
+
+        # ── Notification admins (pour visibilité dans le dashboard) ──
+        await self.broadcast_to_admins({
+            "type": "malus_sent",
+            "source": sender_id,
+            "target": target_id,
+            "malus_type": malus_type,
+        })
 
     async def process_round_end(self) -> None:
         """Clôture une manche : calcule le classement, met à jour les scores,

@@ -2,15 +2,19 @@ package com.example.racetyper.data.repository
 
 import com.example.racetyper.data.model.Friend
 import com.example.racetyper.data.model.GameState
+import com.example.racetyper.data.model.MalusPayload
+import com.example.racetyper.data.model.MalusType
 import com.example.racetyper.data.model.RoundClassement
 import com.example.racetyper.data.websocket.ConnectionState
 import com.example.racetyper.data.websocket.GameEvent
 import com.example.racetyper.data.websocket.RaceTyperWebSocket
+import com.google.gson.Gson
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 
 class GameRepository {
     private val webSocket = RaceTyperWebSocket()
+    private val gson = Gson()
 
     // ── State flows (persistent state consumed by Compose UI) ──
 
@@ -37,15 +41,17 @@ class GameRepository {
         webSocket.destroy()
     }
 
-    // ── Mock data (futur: API REST / BDD) ──
+    // ── Game Master: envoi de malus ──
 
-    fun getMockFriends(): List<Friend> {
-        return listOf(
-            Friend(id = "friend-1", name = "Alexandre", isOnline = true, lastScore = 2450),
-            Friend(id = "friend-2", name = "Marie", isOnline = true, lastScore = 1890),
-            Friend(id = "friend-3", name = "Thomas", isOnline = false, lastScore = 3200),
-            Friend(id = "friend-4", name = "Sophie", isOnline = false, lastScore = 1560),
-            Friend(id = "friend-5", name = "Lucas", isOnline = true, lastScore = 2100)
+    /**
+     * Envoie un malus à un joueur cible via la WebSocket.
+     * @return true si le message a pu être envoyé.
+     */
+    fun sendMalus(targetPlayerId: String, malusType: MalusType): Boolean {
+        val payload = MalusPayload(
+            targetPlayerId = targetPlayerId,
+            malusType = malusType.key
         )
+        return webSocket.send(gson.toJson(payload))
     }
 }

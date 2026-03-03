@@ -7,13 +7,30 @@ Définit trois catégories de routes :
 - **WebSockets** : connexions temps réel joueurs et admin.
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, HTMLResponse
 from .GameManager import GameManager
+from .mqtt_bridge import MQTTBridge
 from .logger import log_server
 
-app = FastAPI()
+
+# ==================== LIFESPAN ====================
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Démarre le bridge MQTT au lancement et le stoppe à l'arrêt."""
+    mqtt = MQTTBridge()
+    mqtt.start()
+    manager.set_mqtt_bridge(mqtt)
+    log_server("MQTT bridge démarré", "INFO")
+    yield
+    mqtt.stop()
+    log_server("MQTT bridge arrêté", "INFO")
+
+app = FastAPI(lifespan=lifespan)
 
 manager = GameManager()
 
