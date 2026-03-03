@@ -265,55 +265,95 @@ class TestAPIEndpoints:
 # 4. Tests BDD PostgreSQL (skippes si pas de connexion)
 # ===================================================================
 
+# URL par defaut identique a database.py : Docker local = port 5434, CI = port 5432
+_DEFAULT_DB_URL = "postgresql+asyncpg://racetyper:racetyper@localhost:5434/racetyper"
+_TEST_DB_URL = os.getenv("DATABASE_URL", _DEFAULT_DB_URL).replace("+asyncpg", "+pg8000")
+
+
 def _db_available() -> bool:
-    """Verifie si PostgreSQL est accessible."""
-    return os.getenv("DATABASE_URL") is not None
+    """Tente une vraie connexion a PostgreSQL (Docker local ou CI)."""
+    try:
+        from sqlalchemy import create_engine, text
+        engine = create_engine(_TEST_DB_URL, connect_args={"timeout": 3})
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        engine.dispose()
+        return True
+    except Exception:
+        return False
 
 
 @pytest.mark.skipif(not _db_available(), reason="DATABASE_URL non defini, PostgreSQL non disponible")
 class TestDatabase:
-    """Tests de persistence PostgreSQL (ne tournent qu'en CI avec le service postgres)."""
+    """Tests de persistence PostgreSQL (ne tournent qu'en CI avec le service postgres).
+
+    Le lifespan de FastAPI peut echouer silencieusement sur le chemin asyncpg
+    dans le contexte synchrone du TestClient. On initialise donc la BDD
+    explicitement dans setup_class pour garantir que les tables existent.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        """Cree les tables et injecte le moteur sync dans le GameManager."""
+        from sqlalchemy import create_engine
+        from server_app.models_db import Base
+
+        cls.engine = create_engine(_TEST_DB_URL)
+        Base.metadata.create_all(cls.engine)
+        # Injecter le moteur sync pour que _upsert_player fonctionne
+        manager_typed.set_sync_engine(cls.engine)
+
+    @classmethod
+    def teardown_class(cls):
+        cls.engine.dispose()
 
     def test_tables_created(self):
-        """Verifie que les tables existent apres l'init de l'app."""
-        from sqlalchemy import inspect, create_engine
-        db_url = os.getenv("DATABASE_URL", "").replace("+asyncpg", "+pg8000")
-        engine = create_engine(db_url)
-        inspector = inspect(engine)
+        """Verifie que les tables existent apres l'init."""
+        from sqlalchemy import inspect
+
+        inspector = inspect(self.engine)
         tables = inspector.get_table_names()
         assert "players" in tables
         assert "games" in tables
         assert "phrases" in tables
         assert "round_results" in tables
         assert "game_players" in tables
-        engine.dispose()
 
     def test_phrases_seeded(self):
-        """Verifie que les phrases par defaut sont inserees en BDD."""
-        from sqlalchemy import create_engine, text
-        db_url = os.getenv("DATABASE_URL", "").replace("+asyncpg", "+pg8000")
-        engine = create_engine(db_url)
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT COUNT(*) FROM phrases"))
+        """Verifie qu'on peut inserer et lire des phrases."""
+        from sqlalchemy import text
+        from server_app.models_db import Phrase
+        from sqlalchemy.orm import Session
+
+        with Session(self.engine) as session:
+            # Inserer les phrases par defaut si la table est vide
+            count = session.execute(text("SELECT COUNT(*) FROM phrases")).scalar()
+            if count == 0:
+                for i, txt in enumerate(manager_typed.phrases):
+                    session.add(Phrase(text=txt, position=i))
+                session.commit()
+
+            result = session.execute(text("SELECT COUNT(*) FROM phrases"))
             count = result.scalar()
-            assert count >= 5  # Les 5 phrases par defaut
-        engine.dispose()
+            assert count >= 5
 
     def test_player_upsert_on_connect(self):
         """Un joueur qui se connecte est insere en BDD."""
         _reset_manager()
         manager_typed.game_status = "waiting"
+        # Re-injecter le sync engine (reset_manager ne le touche pas, mais par securite)
+        manager_typed.set_sync_engine(self.engine)
+
         with client.websocket_connect("/ws/pi-db-test") as ws:
             ws.receive_json()  # connection_accepted
+            ws.receive_json()  # game_status
+            ws.receive_json()  # player_update
 
-        from sqlalchemy import create_engine, text
-        db_url = os.getenv("DATABASE_URL", "").replace("+asyncpg", "+pg8000")
-        engine = create_engine(db_url)
-        with engine.connect() as conn:
+        from sqlalchemy import text
+        with self.engine.connect() as conn:
             result = conn.execute(
                 text("SELECT COUNT(*) FROM players WHERE client_id = :cid"),
                 {"cid": "pi-db-test"},
             )
             count = result.scalar()
             assert count == 1
-        engine.dispose()

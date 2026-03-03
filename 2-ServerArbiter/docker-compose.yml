@@ -8,7 +8,7 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
       POSTGRES_HOST_AUTH_METHOD: trust
     ports:
-      - "5433:5432"   # 5433 pour eviter conflit avec PostgreSQL local sur 5432
+      - "5434:5432"   # 5434 pour eviter conflit avec PostgreSQL natif Windows (5432/5433)
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

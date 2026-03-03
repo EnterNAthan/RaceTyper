@@ -11,7 +11,7 @@ from .models_db import Base
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://racetyper:racetyper@localhost:5433/racetyper",
+    "postgresql+asyncpg://racetyper:racetyper@localhost:5434/racetyper",
 )
 
 # Pour compatibilité : si on reçoit une URL postgresql:// (sans driver), on met asyncpg par défaut
