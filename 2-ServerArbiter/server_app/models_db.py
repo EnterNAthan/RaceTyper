@@ -1,6 +1,6 @@
 """Modèles SQLAlchemy pour la BDD PostgreSQL (contrat aligné avec l'API et l'app mobile)."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import String, Integer, Float, DateTime, ForeignKey, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
@@ -16,8 +16,8 @@ class Player(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     client_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     display_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=lambda: datetime.now(timezone.utc))
 
     game_players: Mapped[list["GamePlayer"]] = relationship(back_populates="player")
     round_results: Mapped[list["RoundResult"]] = relationship(back_populates="player")
@@ -42,7 +42,7 @@ class Phrase(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     position: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     round_results: Mapped[list["RoundResult"]] = relationship(back_populates="phrase")
 
