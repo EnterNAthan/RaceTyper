@@ -30,8 +30,11 @@ class GameManager:
         game_history (list[dict]): Historique des parties jouées.
     """
 
+    SPECTATOR_PREFIXES = ("mobile-", "spectator-")
+
     def __init__(self) -> None:
         self.active_players: dict = {}
+        self.spectators: dict = {}  # {client_id: websocket} connexions en lecture seule
         self.scores: dict[str, int] = {}
         self.object_manager = ObjectManager()
 
@@ -62,6 +65,9 @@ class GameManager:
         self._sync_engine = None
         self._sync_session_factory = None
         self.current_game_id: int | None = None
+
+        # Verrou pour éviter les race conditions lors du traitement de fin de manche
+        self._round_processing_lock = None
 
     def set_session_factory(self, session_maker):
         """Injecte la factory de sessions async (appelé au démarrage si BDD dispo)."""
@@ -471,13 +477,45 @@ class GameManager:
 
     # --- Gestion des Connexions ---
 
+    def _is_spectator(self, client_id: str) -> bool:
+        """Renvoie True si le client_id correspond à un spectateur (lecture seule)."""
+        return client_id.startswith(self.SPECTATOR_PREFIXES)
+
     async def connect(self, websocket, client_id: str) -> None:
-        """Enregistre un nouveau joueur et lui envoie l'état courant.
+        """Enregistre un nouveau joueur (ou spectateur) et lui envoie l'état courant.
 
         Args:
-            websocket: Connexion WebSocket du joueur.
-            client_id: Identifiant unique du joueur (ex. 'pi-1').
+            websocket: Connexion WebSocket du client.
+            client_id: Identifiant unique du client (ex. 'pi-1', 'mobile-spectator').
         """
+        # --- Chemin spectateur (lecture seule) ---
+        if self._is_spectator(client_id):
+            self.spectators[client_id] = websocket
+            log_server(f"Spectateur {client_id} connecté. Total: {len(self.spectators)} spectateurs.", "DEBUG")
+
+            await self.send_to_client(client_id, {
+                "type": "connection_accepted",
+                "client_id": client_id,
+                "role": "spectator"
+            })
+
+            if self.game_status == "playing":
+                await self.send_to_client(client_id, {
+                    "type": "new_phrase",
+                    "phrase": self.phrases[self.current_phrase_index],
+                    "round_number": self.current_phrase_index
+                })
+            else:
+                await self.send_to_client(client_id, {
+                    "type": "game_status",
+                    "status": self.game_status
+                })
+
+            await self.send_to_client(client_id, {"type": "player_update", "scores": self.scores})
+            await self.notify_admins_state_change()
+            return
+
+        # --- Chemin joueur (inchangé) ---
         self.active_players[client_id] = websocket
         self.scores[client_id] = 0
         await self._upsert_player(client_id)
@@ -520,11 +558,19 @@ class GameManager:
             })
 
     async def disconnect(self, client_id: str) -> None:
-        """Retire un joueur de l'état et notifie les autres.
+        """Retire un joueur (ou spectateur) de l'état et notifie les autres.
 
         Args:
-            client_id: Identifiant du joueur déconnecté.
+            client_id: Identifiant du client déconnecté.
         """
+        # --- Chemin spectateur ---
+        if client_id in self.spectators:
+            del self.spectators[client_id]
+            log_server(f"Spectateur {client_id} déconnecté.", "DEBUG")
+            await self.notify_admins_state_change()
+            return
+
+        # --- Chemin joueur (inchangé) ---
         if client_id in self.active_players:
             del self.active_players[client_id]
         if client_id in self.scores:
@@ -540,7 +586,7 @@ class GameManager:
     # --- Méthodes de Communication ---
 
     async def broadcast(self, message: dict) -> None:
-        """Envoie un message JSON à tous les joueurs connectés.
+        """Envoie un message JSON à tous les joueurs ET spectateurs connectés.
 
         Args:
             message: Dictionnaire à sérialiser en JSON et envoyer.
@@ -563,19 +609,31 @@ class GameManager:
                 del self.active_players[client_id]
             if client_id in self.scores:
                 del self.scores[client_id]
+
+        # Envoyer aux spectateurs également
+        disconnected_spectators = []
+        for client_id, ws in self.spectators.items():
+            try:
+                await ws.send_json(message)
+            except Exception:
+                disconnected_spectators.append(client_id)
+
+        for client_id in disconnected_spectators:
+            if client_id in self.spectators:
+                del self.spectators[client_id]
             
     async def send_to_client(self, client_id: str, message: dict) -> None:
-        """Envoie un message JSON à un seul joueur ciblé.
+        """Envoie un message JSON à un seul client ciblé (joueur ou spectateur).
 
         Args:
-            client_id: Identifiant du joueur destinataire.
+            client_id: Identifiant du client destinataire.
             message: Dictionnaire à sérialiser en JSON et envoyer.
         """
         # Log l'envoi
         log_websocket(client_id, "OUT", message)
 
-        if client_id in self.active_players:
-            ws = self.active_players[client_id]
+        ws = self.active_players.get(client_id) or self.spectators.get(client_id)
+        if ws:
             try:
                 await ws.send_json(message)
             except Exception as e:
@@ -585,6 +643,8 @@ class GameManager:
                     del self.active_players[client_id]
                 if client_id in self.scores:
                     del self.scores[client_id]
+                if client_id in self.spectators:
+                    del self.spectators[client_id]
 
     # --- Logique de Jeu Principale (MODIFIÉE) ---
 
@@ -595,7 +655,10 @@ class GameManager:
             client_id: Identifiant du joueur émetteur.
             data: Dictionnaire JSON contenant l'action et ses paramètres.
         """
-        
+        # Les spectateurs ne peuvent pas envoyer d'actions de jeu
+        if self._is_spectator(client_id):
+            return
+
         action = data.get("action")
         
         if action == "phrase_finished":
@@ -618,84 +681,109 @@ class GameManager:
                 # NON. On attend encore des joueurs.
                 pass
 
+    def _ensure_round_lock_initialized(self):
+        """Initialise le verrou de manche s'il ne l'est pas déjà."""
+        if self._round_processing_lock is None:
+            self._round_processing_lock = asyncio.Lock()
+
     async def process_round_end(self) -> None:
         """Clôture une manche : calcule le classement, met à jour les scores,
         puis lance automatiquement la manche suivante (ou termine le jeu).
+        
+        Utilise un verrou pour éviter les race conditions (appels simultanés).
         """
-        log_server("Fin de la manche ! Calcul du classement...")
+        # Initialiser le verrou s'il ne l'est pas encore
+        self._ensure_round_lock_initialized()
         
-        # Trier les résultats pour obtenir le classement (le plus rapide en premier)
-        # item[0] = client_id, item[1] = data (résumé de la phrase)
-        sorted_results = sorted(
-            self.current_round_results.items(), 
-            key=lambda item: item[1].get("time_taken", 99)
-        )
-        
-        classement_data = []
-        
-        # Parcourir le classement pour attribuer les points et les effets
-        for i, (client_id, data) in enumerate(sorted_results):
-            rank = i + 1
+        # Acquisition du verrou pour éviter que process_round_end soit appelée 2 fois simultanément
+        async with self._round_processing_lock:
+            log_server("Fin de la manche ! Calcul du classement...")
             
-            # Attribuer des points en fonction du classement
-            points_de_classement = max(0, 1000 - (rank * 200)) # Ex: 1er=800, 2e=600...
-            self.scores[client_id] += points_de_classement
+            # Trier les résultats pour obtenir le classement (le plus rapide en premier)
+            # item[0] = client_id, item[1] = data (résumé de la phrase)
+            sorted_results = sorted(
+                self.current_round_results.items(), 
+                key=lambda item: item[1].get("time_taken", 99)
+            )
             
-            # Gérer les bonus/malus de la phrase (comme avant)
-            triggered_objects = data.get("objects_triggered", [])
-            await self.apply_effects(client_id, triggered_objects) # Applique les effets (bonus/malus)
+            classement_data = []
             
-            # Construire l'objet de classement à envoyer aux joueurs
-            classement_data.append({
-                "rank": rank,
-                "client_id": client_id,
-                "time": data.get("time_taken"),
-                "score_added": points_de_classement 
+            # Parcourir le classement pour attribuer les points et les effets
+            for i, (client_id, data) in enumerate(sorted_results):
+                rank = i + 1
+                
+                # Attribuer des points en fonction du classement
+                points_de_classement = max(0, 1000 - (rank * 200)) # Ex: 1er=800, 2e=600...
+                if client_id in self.scores:  # Vérifier que le joueur n'a pas été déconnecté
+                    self.scores[client_id] += points_de_classement
+                
+                # Gérer les bonus/malus de la phrase (comme avant)
+                triggered_objects = data.get("objects_triggered", [])
+                await self.apply_effects(client_id, triggered_objects) # Applique les effets (bonus/malus)
+                
+                # Construire l'objet de classement à envoyer aux joueurs
+                classement_data.append({
+                    "rank": rank,
+                    "client_id": client_id,
+                    "time": data.get("time_taken"),
+                    "score_added": points_de_classement 
+                })
+
+            # 3. Persister les résultats de la manche en BDD (avec gestion d'erreur)
+            try:
+                await self._save_round_results(self.current_phrase_index)
+            except Exception as e:
+                log_server(f"Erreur lors de la sauvegarde des résultats: {e}", "WARNING")
+                # Continuer malgré tout pour que les scores soient diffusés aux joueurs
+
+            # 4. Envoyer le classement de la manche ET les scores globaux à tout le monde
+            await self.broadcast({
+                "type": "round_classement", 
+                "classement": classement_data,
+                "global_scores": self.scores
             })
+            
+            # 4a. Forcer une actualisation du scoreboard avec le message player_update
+            await self.broadcast({"type": "player_update", "scores": self.scores})
+            
+            # Attendre 3 secondes pour que les joueurs voient le classement (réduit de 5 à 3)
+            await asyncio.sleep(3) 
+            
+            # Préparer la manche suivante
+            self.current_phrase_index += 1
+            
+            # Vérifier si le jeu est terminé
+            if self.current_phrase_index >= len(self.phrases):
+                # JEU TERMINÉ
+                log_server("JEU TERMINE !", "INFO")
+                await self._finish_game_in_db()
+                await self.broadcast({"type": "game_over", "final_scores": self.scores})
+                # Réinitialiser le jeu
+                self.current_phrase_index = 0
+                self.current_round_results = {}
+                self.scores = {pid: 0 for pid in self.active_players.keys()} # Reset scores
+                self.game_status = "waiting"
+                self.current_game_id = None
+                await self.notify_admins_state_change()
+                return
 
-        # 3. Persister les résultats de la manche en BDD
-        await self._save_round_results(self.current_phrase_index)
+            # Vérifier que le jeu est toujours "playing" (peut avoir été arrêté entre-temps)
+            if self.game_status != "playing":
+                log_server("Jeu n'est plus en mode 'playing', arrêt du traitement de manche", "WARNING")
+                return
 
-        # 4. Envoyer le classement de la manche ET les scores globaux à tout le monde
-        await self.broadcast({
-            "type": "round_classement", 
-            "classement": classement_data,
-            "global_scores": self.scores
-        })
-        
-        # Attendre 5 secondes pour que les joueurs voient le classement
-        await asyncio.sleep(5) 
-        
-        # Préparer la manche suivante
-        self.current_phrase_index += 1
-        
-        # Vérifier si le jeu est terminé
-        if self.current_phrase_index >= len(self.phrases):
-            # JEU TERMINÉ
-            log_server("JEU TERMINE !", "INFO")
-            await self._finish_game_in_db()
-            await self.broadcast({"type": "game_over", "final_scores": self.scores})
-            # Réinitialiser le jeu
-            self.current_phrase_index = 0
-            self.current_round_results = {}
-            self.scores = {pid: 0 for pid in self.active_players.keys()} # Reset scores
-            self.game_status = "waiting"
-            self.current_game_id = None
+            # Lancer la manche suivante
+            log_server(f"Lancement de la manche {self.current_phrase_index + 1}")
+            self.current_round_results = {} # Vider les résultats pour la nouvelle manche
+            new_phrase = self.phrases[self.current_phrase_index]
+            await self.broadcast({"type": "new_phrase", "phrase": new_phrase, "round_number": self.current_phrase_index})
+
+            # Lancer la simulation du bot IA pour la nouvelle manche
+            if self.bot_active:
+                asyncio.create_task(self.simulate_bot_round(new_phrase))
+
+            # Notifier l'interface admin du changement de manche et d'état
             await self.notify_admins_state_change()
-            return
-
-        # Lancer la manche suivante
-        log_server(f"Lancement de la manche {self.current_phrase_index + 1}")
-        self.current_round_results = {} # Vider les résultats pour la nouvelle manche
-        new_phrase = self.phrases[self.current_phrase_index]
-        await self.broadcast({"type": "new_phrase", "phrase": new_phrase, "round_number": self.current_phrase_index})
-
-        # Lancer la simulation du bot IA pour la nouvelle manche
-        if self.bot_active:
-            asyncio.create_task(self.simulate_bot_round(new_phrase))
-
-        # Notifier l'interface admin du changement de manche et d'état
-        await self.notify_admins_state_change()
 
     # (J'ai supprimé calculate_score car s score est maintenant basé sur le classement)
 
@@ -708,23 +796,28 @@ class GameManager:
         """
         for obj in objects:
             if obj.get("type") == "bonus" and obj.get("success"):
-                # Appliquer un bonus
-                bonus_points = self.object_manager.get_bonus_effect()
-                self.scores[client_id] += bonus_points
-                log_server(f"Joueur {client_id} gagne {bonus_points} points bonus!", "DEBUG")
+                # Appliquer un bonus (vérifier que le joueur n'a pas été déconnecté)
+                if client_id in self.scores:
+                    bonus_points = self.object_manager.get_bonus_effect()
+                    self.scores[client_id] += bonus_points
+                    log_server(f"Joueur {client_id} gagne {bonus_points} points bonus!", "DEBUG")
+                else:
+                    log_server(f"Joueur {client_id} bonus non appliqué (joueur déconnecté)", "WARNING")
                 
             elif obj.get("type") == "malus" and obj.get("success"):
                 # Appliquer un malus (sur un adversaire aléatoire)
                 effect = self.object_manager.get_malus_effect()
                 target_player = self.get_random_opponent(client_id)
                 
-                if target_player:
+                if target_player and target_player in self.active_players:
                     log_server(f"Joueur {client_id} envoie un malus '{effect}' à {target_player}!", "DEBUG")
                     # Envoyer la commande d'action hardware au Pi de l'adversaire
                     await self.send_to_client(target_player, {
                         "type": "hardware_action", 
                         "action": effect
                     })
+                else:
+                    log_server(f"Malus de {client_id} non envoyé (adversaire cible déconnecté)", "WARNING")
 
     def get_new_phrase(self) -> str:
         """Retourne une phrase choisie aléatoirement parmi celles disponibles.
@@ -904,24 +997,24 @@ class GameManager:
     # --- Player Management Methods ---
 
     async def kick_player(self, client_id: str) -> None:
-        """Expulse un joueur et ferme sa connexion WebSocket.
+        """Expulse un joueur ou spectateur et ferme sa connexion WebSocket.
 
         Args:
-            client_id: Identifiant du joueur à expulser.
+            client_id: Identifiant du client à expulser.
         """
-        if client_id in self.active_players:
-            log_server(f"Joueur {client_id} expulsé par l'arbitre", "INFO")
-            ws = self.active_players[client_id]
+        ws = self.active_players.get(client_id) or self.spectators.get(client_id)
+        if ws:
+            log_server(f"Client {client_id} expulsé par l'arbitre", "INFO")
             await ws.send_json({"type": "kicked", "message": "Vous avez été expulsé par l'arbitre"})
             await ws.close()
             await self.disconnect(client_id)
             await self.notify_admins_state_change()
 
     async def kick_all_players(self) -> None:
-        """Expulse tous les joueurs connectés un par un."""
-        log_server("Tous les joueurs expulsés par l'arbitre", "INFO")
-        players_to_kick = list(self.active_players.keys())
-        for client_id in players_to_kick:
+        """Expulse tous les joueurs et spectateurs connectés."""
+        log_server("Tous les clients expulsés par l'arbitre", "INFO")
+        all_to_kick = list(self.active_players.keys()) + list(self.spectators.keys())
+        for client_id in all_to_kick:
             await self.kick_player(client_id)
 
     async def set_player_score(self, client_id: str, new_score: int) -> None:
@@ -1190,6 +1283,8 @@ class GameManager:
                 "difficulty": self.bot_difficulty,
                 "id": self.bot_id,
             },
+            "spectator_count": len(self.spectators),
+            "spectators": list(self.spectators.keys()),
         }
 
     async def get_round_stats(self) -> dict:
