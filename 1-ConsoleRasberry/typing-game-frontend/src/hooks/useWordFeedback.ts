@@ -1,28 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 /**
- * Shows a transient "Good!" overlay and plays a short arcade beep whenever
- * a 'word-correct' custom event is dispatched (see useTypingGame).
+ * Plays arcade sounds and triggers a lightweight CSS flash on the body
+ * (no React state / no re-render) for better performance on Raspberry Pi.
  */
 export function useWordFeedback() {
-  const [showGood, setShowGood] = useState(false);
-  const [showBad, setShowBad] = useState(false);
-  const [count, setCount] = useState(0);
-
   useEffect(() => {
     const onWordCorrect = () => {
-      setCount(c => c + 1);
-      setShowGood(true);
       playBeep();
-      const t = setTimeout(() => setShowGood(false), 500);
-      return () => clearTimeout(t);
+      document.body.classList.add('flash-good');
+      setTimeout(() => document.body.classList.remove('flash-good'), 150);
     };
 
     const onWordInvalid = () => {
-      setShowBad(true);
       playError();
-      const t = setTimeout(() => setShowBad(false), 500);
-      return () => clearTimeout(t);
+      document.body.classList.add('flash-bad');
+      setTimeout(() => document.body.classList.remove('flash-bad'), 150);
     };
 
     window.addEventListener('word-correct', onWordCorrect as EventListener);
@@ -32,8 +25,6 @@ export function useWordFeedback() {
       window.removeEventListener('word-invalid', onWordInvalid as EventListener);
     };
   }, []);
-
-  return { showGood, showBad, count };
 }
 
 // Reuse a single AudioContext for all sounds (creating new ones is expensive on Pi)

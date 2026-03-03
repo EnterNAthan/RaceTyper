@@ -613,47 +613,22 @@ body.kiosk * {
   }
 }
 
-.good-overlay { 
-  position: fixed; 
-  inset: 0; 
-  display: grid; 
-  place-items: center; 
-  pointer-events: none; 
-  animation: fade-out 600ms ease forwards;
-  z-index: 1000;
+/* Flash vert/rouge léger via pseudo-élément (pas de re-render React, optimal Pi) */
+body.flash-good::after,
+body.flash-bad::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
 }
 
-.good-overlay span { 
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--success);
-  text-shadow: 0 0 20px var(--success-glow);
-  animation: pop 160ms ease;
-  letter-spacing: 0.05em;
+body.flash-good::after {
+  background: rgba(16, 185, 129, 0.22);
 }
 
-.bad-overlay { 
-  position: fixed; 
-  inset: 0; 
-  display: grid; 
-  place-items: center; 
-  pointer-events: none; 
-  animation: fade-out 600ms ease forwards;
-  z-index: 1000;
-}
-
-.bad-overlay span { 
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--danger);
-  text-shadow: 0 0 20px var(--danger-glow);
-  animation: wobble 200ms ease;
-  letter-spacing: 0.05em;
-}
-
-@keyframes fade-out { 
-  from { opacity: 1; } 
-  to { opacity: 0; } 
+body.flash-bad::after {
+  background: rgba(239, 68, 68, 0.22);
 }
 
 /* ========== WIN OVERLAY ========== */
@@ -802,6 +777,21 @@ body.kiosk * {
 
 .app.shake, body.shake {
   animation: screen-shake 160ms ease;
+}
+
+/* ========== LOBBY NAME EDIT ========== */
+.lobby-name-edit {
+  margin-bottom: 16px;
+}
+
+.lobby-name-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.lobby-name-row .typing-input {
+  flex: 1;
 }
 
 /* ========== LOBBY ========== */

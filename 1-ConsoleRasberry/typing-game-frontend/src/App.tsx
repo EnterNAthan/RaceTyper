@@ -14,11 +14,17 @@ type GameState = 'MENU' | 'COUNTDOWN' | 'PLAYING' | 'WIN' | 'GAMEOVER';
 
 const App: React.FC = () => {
     useArcadeEffects();
-    const { showGood, showBad } = useWordFeedback();
+    useWordFeedback();
     const { isFullscreen, enterFullscreen } = useKioskMode();
 
     const [roundResults, setRoundResults] = useState<PlayerData[]>([]);
     const [finalResults, setFinalResults] = useState<PlayerData[]>([]);
+
+    // Lobby name editing
+    const [editName, setEditName] = useState<string>(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('client') || localStorage.getItem('racetyper_client_id') || '';
+    });
 
     // Malus state
     const [inputDisabled, setInputDisabled] = useState(false);
@@ -68,6 +74,8 @@ const App: React.FC = () => {
         botActive,
         botDifficulty,
         sendPhraseComplete,
+        connect,
+        disconnect,
     } = useServerConnection({
         onPhraseReceived: (phrase) => {
             console.log('New phrase received:', phrase);
@@ -95,6 +103,17 @@ const App: React.FC = () => {
             handleMalusEffect(event.value);
         },
     });
+
+    const handleNameConfirm = useCallback(() => {
+        const name = editName.trim();
+        if (!name) return;
+        localStorage.setItem('racetyper_client_id', name);
+        const params = new URLSearchParams(window.location.search);
+        params.set('client', name);
+        history.replaceState(null, '', `?${params.toString()}`);
+        disconnect();
+        connect();
+    }, [editName, connect, disconnect]);
 
     // Typing game logic
     const {
@@ -217,8 +236,31 @@ const App: React.FC = () => {
                         <h1 className="menu-title">RaceTyper</h1>
                         <p className="menu-subtitle">Course de frappe cooperative</p>
                         <div className="lobby-info">
-                            <p>Connect&eacute; en tant que : <strong>{clientId}</strong></p>
-                            <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>
+                            <div className="lobby-name-edit">
+                                <label className="menu-label" style={{ justifyContent: 'center', marginBottom: '8px' }}>
+                                    Votre nom
+                                </label>
+                                <div className="lobby-name-row">
+                                    <input
+                                        className="typing-input"
+                                        type="text"
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleNameConfirm(); }}
+                                        maxLength={20}
+                                        placeholder="Votre nom..."
+                                    />
+                                    <button className="btn primary" onClick={handleNameConfirm}>
+                                        Confirmer
+                                    </button>
+                                </div>
+                                {clientId && (
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '6px' }}>
+                                        Connecté en tant que : <strong>{clientId}</strong>
+                                    </p>
+                                )}
+                            </div>
+                            <p style={{ color: 'var(--text-muted)', marginTop: '16px' }}>
                                 En attente que l'arbitre d&eacute;marre la partie...
                             </p>
                             <div className="loader"></div>
@@ -365,17 +407,6 @@ const App: React.FC = () => {
                         )}
                     </header>
                     <main className="app-main">
-                        {showGood && (
-                            <div className="good-overlay" aria-live="polite">
-                                <span>Correct</span>
-                            </div>
-                        )}
-                        {showBad && (
-                            <div className="bad-overlay" aria-live="polite">
-                                <span>ERREUR&nbsp;!</span>
-                            </div>
-                        )}
-
                         {/* Malus overlays */}
                         {sirenActive && (
                             <div className="siren-overlay" aria-live="assertive">
