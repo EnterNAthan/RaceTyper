@@ -30,8 +30,11 @@ class GameManager:
         game_history (list[dict]): Historique des parties jouées.
     """
 
+    SPECTATOR_PREFIXES = ("mobile-", "spectator-")
+
     def __init__(self) -> None:
         self.active_players: dict = {}
+        self.spectators: dict = {}  # {client_id: websocket} connexions en lecture seule
         self.scores: dict[str, int] = {}
         self.object_manager = ObjectManager()
 
@@ -474,13 +477,45 @@ class GameManager:
 
     # --- Gestion des Connexions ---
 
+    def _is_spectator(self, client_id: str) -> bool:
+        """Renvoie True si le client_id correspond à un spectateur (lecture seule)."""
+        return client_id.startswith(self.SPECTATOR_PREFIXES)
+
     async def connect(self, websocket, client_id: str) -> None:
-        """Enregistre un nouveau joueur et lui envoie l'état courant.
+        """Enregistre un nouveau joueur (ou spectateur) et lui envoie l'état courant.
 
         Args:
-            websocket: Connexion WebSocket du joueur.
-            client_id: Identifiant unique du joueur (ex. 'pi-1').
+            websocket: Connexion WebSocket du client.
+            client_id: Identifiant unique du client (ex. 'pi-1', 'mobile-spectator').
         """
+        # --- Chemin spectateur (lecture seule) ---
+        if self._is_spectator(client_id):
+            self.spectators[client_id] = websocket
+            log_server(f"Spectateur {client_id} connecté. Total: {len(self.spectators)} spectateurs.", "DEBUG")
+
+            await self.send_to_client(client_id, {
+                "type": "connection_accepted",
+                "client_id": client_id,
+                "role": "spectator"
+            })
+
+            if self.game_status == "playing":
+                await self.send_to_client(client_id, {
+                    "type": "new_phrase",
+                    "phrase": self.phrases[self.current_phrase_index],
+                    "round_number": self.current_phrase_index
+                })
+            else:
+                await self.send_to_client(client_id, {
+                    "type": "game_status",
+                    "status": self.game_status
+                })
+
+            await self.send_to_client(client_id, {"type": "player_update", "scores": self.scores})
+            await self.notify_admins_state_change()
+            return
+
+        # --- Chemin joueur (inchangé) ---
         self.active_players[client_id] = websocket
         self.scores[client_id] = 0
         await self._upsert_player(client_id)
@@ -523,11 +558,19 @@ class GameManager:
             })
 
     async def disconnect(self, client_id: str) -> None:
-        """Retire un joueur de l'état et notifie les autres.
+        """Retire un joueur (ou spectateur) de l'état et notifie les autres.
 
         Args:
-            client_id: Identifiant du joueur déconnecté.
+            client_id: Identifiant du client déconnecté.
         """
+        # --- Chemin spectateur ---
+        if client_id in self.spectators:
+            del self.spectators[client_id]
+            log_server(f"Spectateur {client_id} déconnecté.", "DEBUG")
+            await self.notify_admins_state_change()
+            return
+
+        # --- Chemin joueur (inchangé) ---
         if client_id in self.active_players:
             del self.active_players[client_id]
         if client_id in self.scores:
@@ -543,7 +586,7 @@ class GameManager:
     # --- Méthodes de Communication ---
 
     async def broadcast(self, message: dict) -> None:
-        """Envoie un message JSON à tous les joueurs connectés.
+        """Envoie un message JSON à tous les joueurs ET spectateurs connectés.
 
         Args:
             message: Dictionnaire à sérialiser en JSON et envoyer.
@@ -566,19 +609,31 @@ class GameManager:
                 del self.active_players[client_id]
             if client_id in self.scores:
                 del self.scores[client_id]
+
+        # Envoyer aux spectateurs également
+        disconnected_spectators = []
+        for client_id, ws in self.spectators.items():
+            try:
+                await ws.send_json(message)
+            except Exception:
+                disconnected_spectators.append(client_id)
+
+        for client_id in disconnected_spectators:
+            if client_id in self.spectators:
+                del self.spectators[client_id]
             
     async def send_to_client(self, client_id: str, message: dict) -> None:
-        """Envoie un message JSON à un seul joueur ciblé.
+        """Envoie un message JSON à un seul client ciblé (joueur ou spectateur).
 
         Args:
-            client_id: Identifiant du joueur destinataire.
+            client_id: Identifiant du client destinataire.
             message: Dictionnaire à sérialiser en JSON et envoyer.
         """
         # Log l'envoi
         log_websocket(client_id, "OUT", message)
 
-        if client_id in self.active_players:
-            ws = self.active_players[client_id]
+        ws = self.active_players.get(client_id) or self.spectators.get(client_id)
+        if ws:
             try:
                 await ws.send_json(message)
             except Exception as e:
@@ -588,6 +643,8 @@ class GameManager:
                     del self.active_players[client_id]
                 if client_id in self.scores:
                     del self.scores[client_id]
+                if client_id in self.spectators:
+                    del self.spectators[client_id]
 
     # --- Logique de Jeu Principale (MODIFIÉE) ---
 
@@ -598,7 +655,10 @@ class GameManager:
             client_id: Identifiant du joueur émetteur.
             data: Dictionnaire JSON contenant l'action et ses paramètres.
         """
-        
+        # Les spectateurs ne peuvent pas envoyer d'actions de jeu
+        if self._is_spectator(client_id):
+            return
+
         action = data.get("action")
         
         if action == "phrase_finished":
@@ -937,24 +997,24 @@ class GameManager:
     # --- Player Management Methods ---
 
     async def kick_player(self, client_id: str) -> None:
-        """Expulse un joueur et ferme sa connexion WebSocket.
+        """Expulse un joueur ou spectateur et ferme sa connexion WebSocket.
 
         Args:
-            client_id: Identifiant du joueur à expulser.
+            client_id: Identifiant du client à expulser.
         """
-        if client_id in self.active_players:
-            log_server(f"Joueur {client_id} expulsé par l'arbitre", "INFO")
-            ws = self.active_players[client_id]
+        ws = self.active_players.get(client_id) or self.spectators.get(client_id)
+        if ws:
+            log_server(f"Client {client_id} expulsé par l'arbitre", "INFO")
             await ws.send_json({"type": "kicked", "message": "Vous avez été expulsé par l'arbitre"})
             await ws.close()
             await self.disconnect(client_id)
             await self.notify_admins_state_change()
 
     async def kick_all_players(self) -> None:
-        """Expulse tous les joueurs connectés un par un."""
-        log_server("Tous les joueurs expulsés par l'arbitre", "INFO")
-        players_to_kick = list(self.active_players.keys())
-        for client_id in players_to_kick:
+        """Expulse tous les joueurs et spectateurs connectés."""
+        log_server("Tous les clients expulsés par l'arbitre", "INFO")
+        all_to_kick = list(self.active_players.keys()) + list(self.spectators.keys())
+        for client_id in all_to_kick:
             await self.kick_player(client_id)
 
     async def set_player_score(self, client_id: str, new_score: int) -> None:
@@ -1223,6 +1283,8 @@ class GameManager:
                 "difficulty": self.bot_difficulty,
                 "id": self.bot_id,
             },
+            "spectator_count": len(self.spectators),
+            "spectators": list(self.spectators.keys()),
         }
 
     async def get_round_stats(self) -> dict:
