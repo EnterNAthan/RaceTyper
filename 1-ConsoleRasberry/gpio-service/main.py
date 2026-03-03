@@ -1,7 +1,10 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+
+from malus_handler import MalusHandler
 
 # Simulation mode - will be set to True if RPi.GPIO is available
 IS_RASPBERRY = False
@@ -19,6 +22,10 @@ LED_PIN = 17
 SIREN_PIN = 18
 
 
+# Instance globale du gestionnaire de malus
+malus_handler = MalusHandler()
+
+
 # Lifespan context manager for startup and shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,10 +39,15 @@ async def lifespan(app: FastAPI):
         GPIO.output(LED_PIN, GPIO.LOW)
         GPIO.output(SIREN_PIN, GPIO.LOW)
         print("GPIO pins initialized successfully")
-    
+
+    # Start MQTT malus handler
+    malus_handler.start()
+    print(f"Malus handler started (console: {malus_handler.console_id})")
+
     yield
-    
-    # Shutdown: Cleanup GPIO pins
+
+    # Shutdown: stop malus handler then cleanup GPIO
+    malus_handler.stop()
     if IS_RASPBERRY:
         GPIO.cleanup()
         print("GPIO cleanup completed")

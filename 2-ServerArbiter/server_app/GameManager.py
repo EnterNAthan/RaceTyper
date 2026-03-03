@@ -253,18 +253,31 @@ class GameManager:
             log_server(f"send_malus cible '{target_id}' non connectée (de {sender_id})", "WARNING")
             return
 
-        # ── Publication MQTT vers la console Pi ──
-        if self._mqtt is not None:
-            ok = self._mqtt.publish_malus(target_id, malus_type, source=sender_id)
-            if ok:
-                log_server(
-                    f"Malus '{malus_type}' → {target_id} via MQTT (source: {sender_id})",
-                    "INFO",
-                )
+        # ── Routage selon le type de malus ──
+        #   - physical_distraction : GPIO (sirène + LEDs sur le Pi) → MQTT
+        #   - intrusive_gif / disable_keyboard : UI du frontend → WebSocket direct
+        HW_MALUS = {"physical_distraction"}
+        UI_MALUS = {"intrusive_gif", "disable_keyboard"}
+
+        if malus_type in HW_MALUS:
+            if self._mqtt is not None:
+                ok = self._mqtt.publish_malus(target_id, malus_type, source=sender_id)
+                status = "OK" if ok else "ÉCHEC"
+                log_server(f"Malus HW '{malus_type}' → {target_id} MQTT [{status}]", "INFO")
             else:
-                log_server(f"Échec MQTT pour malus '{malus_type}' → {target_id}", "WARNING")
-        else:
-            log_server("MQTT bridge non configuré, malus non transmis", "WARNING")
+                log_server("MQTT bridge non configuré, malus HW non transmis", "WARNING")
+
+        if malus_type in UI_MALUS:
+            target_ws = self.active_players.get(target_id)
+            if target_ws is not None:
+                try:
+                    await target_ws.send_json({
+                        "type": "malus",
+                        "malus_type": malus_type,
+                    })
+                    log_server(f"Malus UI '{malus_type}' → {target_id} via WebSocket", "INFO")
+                except Exception as exc:
+                    log_server(f"Échec WS malus UI vers {target_id}: {exc}", "WARNING")
 
         # ── Notification admins (pour visibilité dans le dashboard) ──
         await self.broadcast_to_admins({

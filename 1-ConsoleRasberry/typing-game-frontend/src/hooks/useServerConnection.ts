@@ -175,6 +175,12 @@ export const useServerConnection = ({
                     cbs.onMalusBonus?.({ type: 'malus', value: message.action });
                     break;
 
+                case 'malus':
+                    // Malus UI envoyé directement par le serveur via WebSocket
+                    console.log('🚨 Malus reçu:', message.malus_type);
+                    cbs.onMalusBonus?.({ type: 'malus', value: message.malus_type });
+                    break;
+
                 case 'kicked':
                     console.log('❌ Kicked from game:', message.message);
                     setState(prev => ({ ...prev, connected: false }));

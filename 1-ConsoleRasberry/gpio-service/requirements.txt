@@ -1,3 +1,4 @@
 fastapi
 uvicorn[standard]
 RPi.GPIO
+paho-mqtt
