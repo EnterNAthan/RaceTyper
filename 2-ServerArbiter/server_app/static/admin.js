@@ -23,8 +23,9 @@ class AdminDashboard {
         this.gameStatus = document.getElementById('gameStatus');
         this.currentPhrase = document.getElementById('currentPhrase');
 
-        // Players & Ranking
+        // Players, Spectators & Ranking
         this.playersList = document.getElementById('playersList');
+        this.spectatorsList = document.getElementById('spectatorsList');
         this.rankingList = document.getElementById('rankingList');
 
         // Logs
@@ -202,6 +203,11 @@ class AdminDashboard {
                 if (data.bot) {
                     this.updateIaState(data.bot);
                 }
+
+                // Mettre à jour la liste des spectateurs
+                if (data.spectators !== undefined) {
+                    this.updateSpectators(data.spectators);
+                }
                 break;
             case 'players_update':
                 this.updatePlayers(data.players, data.scores);
@@ -244,6 +250,9 @@ class AdminDashboard {
                 this.updateGameState(data);
                 this.updatePlayers(data.players, data.scores);
                 this.updatePhrasesList(data.phrases, data.current_phrase_index);
+                if (data.spectators) {
+                    this.updateSpectators(data.spectators);
+                }
             }
         } catch (error) {
             console.error('Error loading initial data:', error);
@@ -297,6 +306,39 @@ class AdminDashboard {
                 </div>
             `;
             this.playersList.appendChild(playerDiv);
+        }
+    }
+
+    updateSpectators(spectators) {
+        if (!spectators || spectators.length === 0) {
+            this.spectatorsList.innerHTML = '<p class="empty-state">Aucun spectateur connecté</p>';
+            return;
+        }
+
+        this.spectatorsList.innerHTML = '';
+
+        for (const specId of spectators) {
+            const specDiv = document.createElement('div');
+            specDiv.className = 'player-item spectator-item';
+            specDiv.innerHTML = `
+                <div class="player-info">
+                    <div class="player-name">
+                        ${specId}
+                        <span class="spectator-tag">SPEC</span>
+                    </div>
+                    <div class="player-score spectator-role">Lecture seule</div>
+                </div>
+                <div class="player-actions">
+                    <button class="btn btn-small btn-danger" onclick="dashboard.kickSpectator('${specId}')">Kick</button>
+                </div>
+            `;
+            this.spectatorsList.appendChild(specDiv);
+        }
+    }
+
+    kickSpectator(specId) {
+        if (confirm(`Expulser le spectateur ${specId} ?`)) {
+            this.sendCommand('kick_player', { player_id: specId });
         }
     }
 

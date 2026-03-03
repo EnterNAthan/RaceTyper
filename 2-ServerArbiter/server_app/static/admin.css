@@ -380,6 +380,7 @@ header h1::before {
 .card.logs h2::before { content: '▥'; font-size: 1.2rem; }
 .card.quick-actions h2::before { content: '⚡'; font-size: 1.2rem; }
 .card.round-stats h2::before { content: '◧'; font-size: 1.2rem; }
+.card.spectators h2::before { content: '◎'; font-size: 1.2rem; }
 .card.ia-control h2::before { content: '🤖'; font-size: 1.2rem; }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -918,6 +919,29 @@ header h1::before {
 .rank-item.bot-player {
     border-color: rgba(191, 0, 255, 0.5);
     box-shadow: 0 0 20px rgba(191, 0, 255, 0.25);
+}
+
+/* Style spécial pour les spectateurs */
+.player-item.spectator-item {
+    border-left-color: var(--neon-amber);
+}
+
+.player-item .spectator-tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    border-radius: 2px;
+    border: 1px solid var(--neon-amber);
+    color: var(--neon-amber);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.spectator-role {
+    color: var(--text-muted) !important;
+    text-shadow: none !important;
+    font-style: italic;
 }
 
 .rank-item .bot-tag {

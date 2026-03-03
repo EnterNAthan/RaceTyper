@@ -607,9 +607,16 @@ const App: React.FC = () => {
     );
 };
 
+let sirenAudioCtx: AudioContext | null = null;
 function playSirenSound() {
     try {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        if (!sirenAudioCtx || sirenAudioCtx.state === 'closed') {
+            sirenAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        if (sirenAudioCtx.state === 'suspended') {
+            sirenAudioCtx.resume();
+        }
+        const ctx = sirenAudioCtx;
         const o = ctx.createOscillator();
         const g = ctx.createGain();
         o.type = 'sawtooth';
@@ -618,7 +625,7 @@ function playSirenSound() {
         o.connect(g);
         g.connect(ctx.destination);
         const now = ctx.currentTime;
-        o.start();
+        o.start(now);
         o.frequency.setValueAtTime(600, now);
         o.frequency.linearRampToValueAtTime(1200, now + 0.5);
         o.frequency.linearRampToValueAtTime(600, now + 1.0);

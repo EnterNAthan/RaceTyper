@@ -80,11 +80,7 @@ interface TypingInputProps {
 
 export const TypingInput: React.FC<TypingInputProps> = ({ value, onChange, disabled, visuallyHidden }) => {
     return (
-        <div className={"typing-input-card" + (visuallyHidden ? " sr-only" : "")} onKeyDown={(e) => {
-            const div = e.currentTarget;
-            div.classList.add('shake');
-            setTimeout(() => div.classList.remove('shake'), 120);
-        }}>
+        <div className={"typing-input-card" + (visuallyHidden ? " sr-only" : "")}>
             <input
                 className="typing-input"
                 type="text"
