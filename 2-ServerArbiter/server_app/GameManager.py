@@ -54,6 +54,7 @@ class GameManager:
         ]
 
         self.current_phrase_index: int = 0
+        self.phrase_ids: list[int] = []  # IDs BDD des phrases (même ordre que self.phrases)
         self.current_round_results: dict[str, dict] = {}
 
         self.admin_connections: list = []
@@ -106,12 +107,19 @@ class GameManager:
                 phrases_rows = list(result.scalars().all())
                 if phrases_rows:
                     self.phrases = [p.text for p in phrases_rows]
+                    self.phrase_ids = [p.id for p in phrases_rows]
                     log_server(f"Phrases chargées depuis la BDD: {len(self.phrases)}", "INFO")
                 else:
+                    phrase_objects = []
                     for i, text in enumerate(default_phrases):
-                        session.add(Phrase(text=text, position=i))
+                        p = Phrase(text=text, position=i)
+                        session.add(p)
+                        phrase_objects.append(p)
                     await session.commit()
-                    self.phrases = list(default_phrases)
+                    for p in phrase_objects:
+                        await session.refresh(p)
+                    self.phrases = [p.text for p in phrase_objects]
+                    self.phrase_ids = [p.id for p in phrase_objects]
                     log_server("Phrases par défaut insérées en BDD", "INFO")
         except Exception as e:
             log_server(f"Chargement des phrases depuis la BDD: {e}", "WARNING")
@@ -133,12 +141,19 @@ class GameManager:
                 phrases_rows = list(result.scalars().all())
                 if phrases_rows:
                     self.phrases = [p.text for p in phrases_rows]
+                    self.phrase_ids = [p.id for p in phrases_rows]
                     log_server(f"Phrases chargées depuis la BDD: {len(self.phrases)}", "INFO")
                 else:
+                    phrase_objects = []
                     for i, text in enumerate(default_phrases):
-                        session.add(Phrase(text=text, position=i))
+                        p = Phrase(text=text, position=i)
+                        session.add(p)
+                        phrase_objects.append(p)
                     session.commit()
-                    self.phrases = list(default_phrases)
+                    for p in phrase_objects:
+                        session.refresh(p)
+                    self.phrases = [p.text for p in phrase_objects]
+                    self.phrase_ids = [p.id for p in phrase_objects]
                     log_server("Phrases par défaut insérées en BDD", "INFO")
         except Exception as e:
             log_server(f"Chargement des phrases depuis la BDD: {e}", "WARNING")
@@ -256,6 +271,7 @@ class GameManager:
                         game_id=self.current_game_id,
                         round_index=round_index,
                         player_id=player_id,
+                        phrase_id=self.phrase_ids[round_index] if round_index < len(self.phrase_ids) else None,
                         time_taken=float(data.get("time_taken", 0)),
                         errors=data.get("errors", 0),
                         score_added=points,
@@ -282,6 +298,7 @@ class GameManager:
                     game_id=self.current_game_id,
                     round_index=round_index,
                     player_id=player_id,
+                    phrase_id=self.phrase_ids[round_index] if round_index < len(self.phrase_ids) else None,
                     time_taken=float(data.get("time_taken", 0)),
                     errors=data.get("errors", 0),
                     score_added=points,
