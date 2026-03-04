@@ -63,7 +63,27 @@ data class Friend(
     val isOnline: Boolean = false,
     val lastScore: Int = 0
 )
+// ---------- Malus (Game Master → Serveur) ----------
 
+/**
+ * Types de malus envoyables depuis l'app mobile (Game Master).
+ * La valeur [key] correspond au champ "malus_type" attendu par le serveur.
+ */
+enum class MalusType(val key: String, val label: String, val description: String) {
+    INTRUSIVE_GIF("intrusive_gif", "GIF Intrusif", "Affiche un GIF distrayant sur l'écran du joueur"),
+    DISABLE_KEYBOARD("disable_keyboard", "Bloquer Clavier", "Bloque le clavier physique pendant 1 seconde"),
+    PHYSICAL_DISTRACTION("physical_distraction", "Distraction Physique", "Déclenche la sirène et les LEDs de la borne");
+}
+
+/**
+ * Payload JSON envoyé au serveur pour infliger un malus.
+ * Sérialisé en : {"action":"send_malus","target_player_id":"pi-1","malus_type":"disable_keyboard"}
+ */
+data class MalusPayload(
+    val action: String = "send_malus",
+    @SerializedName("target_player_id") val targetPlayerId: String,
+    @SerializedName("malus_type") val malusType: String
+)
 // ---------- DTOs pour les API REST basées sur la BDD (futur) ----------
 
 /** Résumé d’une partie passée (GET /api/games ou /api/history). */

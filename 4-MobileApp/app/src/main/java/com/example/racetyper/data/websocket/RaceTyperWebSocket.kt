@@ -120,6 +120,14 @@ class RaceTyperWebSocket {
         _connectionState.value = ConnectionState.Disconnected
     }
 
+    /**
+     * Envoie un message JSON brut au serveur via la WebSocket ouverte.
+     * @return true si le message a été mis en file d'envoi, false si la connexion est fermée.
+     */
+    fun send(json: String): Boolean {
+        return webSocket?.send(json) ?: false
+    }
+
     /** Libère toutes les ressources (à appeler quand le Repository est détruit). */
     fun destroy() {
         disconnect()

@@ -10,12 +10,12 @@ import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -68,10 +68,10 @@ fun RaceTyperApp() {
             unselectedIcon = Icons.Outlined.EmojiEvents
         ),
         BottomNavItem(
-            screen = Screen.Friends,
-            label = "Amis",
-            selectedIcon = Icons.Filled.People,
-            unselectedIcon = Icons.Outlined.People
+            screen = Screen.PlayersControl,
+            label = "Contrôle",
+            selectedIcon = Icons.Filled.SportsEsports,
+            unselectedIcon = Icons.Outlined.SportsEsports
         ),
         BottomNavItem(
             screen = Screen.Settings,

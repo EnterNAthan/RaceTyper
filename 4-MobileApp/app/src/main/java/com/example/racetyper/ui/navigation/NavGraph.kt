@@ -5,8 +5,8 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.example.racetyper.ui.screens.FriendsScreen
 import com.example.racetyper.ui.screens.HomeScreen
+import com.example.racetyper.ui.screens.PlayersControlScreen
 import com.example.racetyper.ui.screens.RankingsScreen
 import com.example.racetyper.ui.screens.SettingsScreen
 import com.example.racetyper.ui.viewmodel.GameViewModel
@@ -14,7 +14,7 @@ import com.example.racetyper.ui.viewmodel.GameViewModel
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Rankings : Screen("rankings")
-    object Friends : Screen("friends")
+    object PlayersControl : Screen("players_control")
     object Settings : Screen("settings")
 }
 
@@ -47,8 +47,8 @@ fun NavGraph(
             )
         }
 
-        composable(Screen.Friends.route) {
-            FriendsScreen(
+        composable(Screen.PlayersControl.route) {
+            PlayersControlScreen(
                 viewModel = viewModel,
                 onNavigateBack = {
                     navController.popBackStack()

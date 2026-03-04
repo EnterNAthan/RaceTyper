@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import TypingPhrase, { TypingInput } from './components/TypingDisplay';
 import ProgressBar from './components/ProgressBar';
 import GameStats from './components/GameStats';
+import MalusOverlay from './components/MalusOverlay';
 import { useTypingGame } from './hooks/useTypingGame';
 import { useArcadeEffects } from './hooks/useArcadeEffects';
 import { useWordFeedback } from './hooks/useWordFeedback';
@@ -30,6 +31,8 @@ const App: React.FC = () => {
     const [inputDisabled, setInputDisabled] = useState(false);
     const [sirenActive, setSirenActive] = useState(false);
     const [sleepActive, setSleepActive] = useState(false);
+    const [showIntrusiveGif, setShowIntrusiveGif] = useState(false);
+    const [keyboardDisabled, setKeyboardDisabled] = useState(false);
 
     // Malus effect handler
     const handleMalusEffect = useCallback((action: string) => {
@@ -53,6 +56,19 @@ const App: React.FC = () => {
                 break;
             case 'SWAPKEY':
                 // MVP: not implemented
+                break;
+            // ── Malus envoyés directement par le serveur via WebSocket ──
+            case 'intrusive_gif':
+                setShowIntrusiveGif(true);
+                setTimeout(() => setShowIntrusiveGif(false), 3000);
+                break;
+            case 'disable_keyboard':
+                setKeyboardDisabled(true);
+                setInputDisabled(true);
+                setTimeout(() => {
+                    setKeyboardDisabled(false);
+                    setInputDisabled(false);
+                }, 1000);
                 break;
         }
     }, []);
@@ -420,6 +436,12 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                         )}
+
+                        {/* MQTT malus overlays (GIF + keyboard disable) */}
+                        <MalusOverlay
+                            showGif={showIntrusiveGif}
+                            keyboardDisabled={keyboardDisabled}
+                        />
 
                         {/* Game paused by admin */}
                         {gameStatus === 'paused' && (

@@ -935,3 +935,87 @@ body.flash-bad::after {
   color: var(--text-muted);
   letter-spacing: 0.05em;
 }
+
+/* ========== MQTT MALUS OVERLAYS ========== */
+
+/* ── Intrusive GIF (fullscreen, 3 s) ── */
+.malus-gif-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.92);
+  animation: malus-gif-in 150ms ease-out;
+}
+
+.malus-gif-image {
+  max-width: 90vw;
+  max-height: 75vh;
+  object-fit: contain;
+  border: 4px solid var(--danger, #ff4444);
+  border-radius: 12px;
+  box-shadow: 0 0 60px rgba(255, 0, 0, 0.5);
+}
+
+.malus-gif-label {
+  margin-top: 16px;
+  font-size: 48px;
+  font-weight: 900;
+  color: var(--danger, #ff4444);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  text-shadow: 0 0 30px rgba(255, 0, 0, 0.7);
+  animation: malus-pulse 0.4s ease infinite alternate;
+}
+
+@keyframes malus-gif-in {
+  from { opacity: 0; transform: scale(1.1); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes malus-pulse {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0.7; transform: scale(1.05); }
+}
+
+/* ── Keyboard disabled banner (1 s) ── */
+.malus-kb-overlay {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  pointer-events: none;
+  animation: malus-kb-in 200ms ease-out;
+}
+
+.malus-kb-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 60, 60, 0.9);
+  border: 2px solid #ff2222;
+  border-radius: 12px;
+  padding: 14px 28px;
+  box-shadow: 0 0 40px rgba(255, 0, 0, 0.4);
+}
+
+.malus-kb-icon {
+  font-size: 28px;
+}
+
+.malus-kb-text {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes malus-kb-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
