@@ -1,80 +1,127 @@
-#🤖 Pôle 3 : Agent d'IA (Deep Q-Network)
-Ce dossier contient l'implémentation de l'agent d'Intelligence Artificielle.
+# Pôle 3 – Agent IA (Bot PPO)
 
-Contrairement à une approche Q-Learning classique (basée sur une Q-Table), ce projet utilise un Deep Q-Network (DQN). L'espace d'états (toutes les phrases possibles) étant infini, une Q-Table est inutilisable. Nous utilisons un réseau de neurones (probablement un LSTM) pour approximer la fonction de valeur Q.
+Ce dossier contient le **bot IA** du projet RaceTyper : un adversaire virtuel capable de taper du texte, entraîné par apprentissage par renforcement.
 
-L'objectif est d'entraîner cet agent à simuler un joueur virtuel qui optimise sa stratégie de frappe (Vitesse vs. Précision) pour gagner la course.
+## Principe général
 
-#🏛️ Architecture Technique
-Ce pôle est composé de plusieurs fichiers clés qui fonctionnent ensemble :
+Le bot utilise l'algorithme **PPO** (Proximal Policy Optimization), un algorithme d'apprentissage par renforcement moderne et stable fourni par la bibliothèque [Stable-Baselines3](https://stable-baselines3.readthedocs.io/).
 
-mock_env.py: Environnement de simulation (basé sur l'API Gymnasium). C'est un "faux jeu" en mode console qui permet à l'IA de s'entraîner des millions de fois, très rapidement et en toute autonomie.
+Concrètement, voici comment ça fonctionne :
 
-model.py: Le "Cerveau". Définit l'architecture du réseau de neurones (DQN-LSTM) en PyTorch ou TensorFlow.
+1. On a créé un **environnement de simulation** (un "faux jeu") dans lequel l'IA s'entraîne à taper des phrases.
+2. L'IA reçoit en entrée la **lettre qu'elle doit taper** (l'observation).
+3. Elle choisit une **action** : une lettre parmi les 66 caractères supportés (`a-z`, `A-Z`, espace, accents, ponctuation).
+4. Si elle tape la bonne lettre → **récompense +1**. Si elle se trompe → **pénalité -1** et elle doit réessayer.
+5. En répétant ce processus sur **200 000 étapes d'entraînement**, l'IA apprend à reproduire correctement la lettre demandée.
 
-agent.py: La "Logique". Contient la classe DQNAgent qui gère l'apprentissage :
+Le modèle entraîné est sauvegardé dans un fichier `ppo_typing_v1.zip`, prêt à être utilisé en jeu comme adversaire.
 
-Mémoire de Rejeu (Replay Buffer)
+## Structure des fichiers
 
-Politique Epsilon-Greedy (Exploration vs. Exploitation)
+| Fichier | Rôle |
+|---|---|
+| `custom_env.py` | **Environnement Gymnasium** — simule le jeu de frappe pour l'entraînement. Pioche des phrases dans `vocab.py`, gère le curseur et calcule la récompense. |
+| `vocab.py` | **Vocabulaire** — liste de phrases d'entraînement variées (pangrammes, phrases avec accents et majuscules, etc.). |
+| `train_manager.py` | **Script d'entraînement** — lance l'entraînement PPO, affiche les métriques en temps réel (précision, score) et sauvegarde le modèle. |
+| `inference_server.py` | **Serveur d'inférence** — API FastAPI qui charge le modèle et expose un endpoint `/predict` pour que le jeu puisse interroger l'IA. |
+| `rpi_bot_client.py` | **Client Raspberry Pi** — charge le modèle localement et exécute l'inférence directement sur la borne arcade. |
+| `requirements.txt` | Dépendances Python du projet. |
 
-La boucle learn() qui met à jour le cerveau.
+Fichiers générés après entraînement :
 
-train.py: L'Entraîneur. Script principal qui orchestre l'entraînement :
+| Fichier | Rôle |
+|---|---|
+| `ppo_typing_v1.zip` | Le modèle entraîné (poids du réseau de neurones). |
+| `training_results.png` | Graphique de progression de l'entraînement. |
 
-Charge l'environnement (mock_env.py) et l'agent (agent.py).
+## Comment l'IA a été entraînée
 
-Lance la boucle d'entraînement sur des millions de parties.
+### L'environnement de simulation (`custom_env.py`)
 
-Gère la sauvegarde et la reprise sur checkpoint.
+L'environnement suit le standard **Gymnasium** (l'API de référence pour le reinforcement learning en Python). Voici ce qui se passe à chaque épisode :
 
-play.py: (Optionnel) Un script pour voir l'agent entraîné jouer (en mode console).
+1. Une **phrase aléatoire** est choisie dans le vocabulaire (`vocab.py`).
+2. L'IA reçoit l'**index de la lettre cible** comme observation (ex : `0` = `a`, `1` = `b`, `26` = espace…).
+3. Elle répond avec un **index de lettre** (son action).
+4. Si c'est la bonne lettre → le curseur avance. Sinon → il reste en place et l'IA est pénalisée.
+5. L'épisode se termine quand la phrase est entièrement tapée.
 
-typing_checkpoint.pth: Le Résultat. Fichier binaire contenant les "poids" (l'intelligence) de l'IA entraînée. C'est ce fichier qui sera livré.
+### L'algorithme PPO (`train_manager.py`)
 
-#🛠️ Installation et Entraînement
-Prérequis
-Ce projet est autonome et ne dépend pas de la base de données du Pôle 2 pour son entraînement.
+On utilise **PPO** avec une politique `MlpPolicy` (un réseau de neurones simple à couches denses). L'entraînement tourne sur **200 000 timesteps**, ce qui prend quelques minutes.
 
-Python 3.10+
+Pendant l'entraînement, un callback affiche toutes les 10 parties :
+- La **précision** de frappe (% de bonnes lettres)
+- Le **score cumulé** par épisode
+- L'**efficacité** (ratio touches / longueur de la phrase — idéalement 1.0)
 
-PyTorch (ou TensorFlow)
+À la fin, le modèle est sauvegardé sous `ppo_typing_v1.zip` et un graphique récapitulatif est généré (`training_results.png`).
 
-Gymnasium (pour l'API de l'environnement)
+## Installation
 
-Lancement de l'Entraînement
-Installer les dépendances :
+### Prérequis
 
-Bash
+- **Python 3.10+**
+- Le projet est autonome : pas besoin du serveur (Pôle 2) ni de la base de données pour entraîner le bot.
 
-pip install torch gymnasium
-Lancer l'entraînement :
+### Installer les dépendances
 
-Bash
+```bash
+cd 3-IAEngine
+pip install -r requirements.txt
+```
 
-python train.py
-Reprise sur Checkpoint : Le script train.py est conçu pour sauvegarder sa progression (ex: typing_checkpoint.pth) régulièrement. Si vous arrêtez le script (avec Ctrl+C) et le relancez, il reprendra automatiquement son entraînement là où il s'était arrêté.
+Cela installe : `stable-baselines3`, `gymnasium`, `fastapi`, `uvicorn`, `matplotlib`.
 
-#🤝 Intégration (API avec le Pôle 2)
-L'intégration ne se fait PAS par un accès à une base de données commune. Elle se fait via une Interface (API) claire.
+## Utilisation
 
-Pôle 3 (IA) : S'entraîne en autonomie en utilisant mock_env.py.
+### 1. Entraîner le modèle
 
-Contrat d'API : Le Pôle 2 (Serveur) doit implémenter une classe RealGameEnv qui respecte exactement la même interface que mock_env.py (méthodes reset() et step(...)).
+```bash
+python train_manager.py
+```
 
-Livraison : Le Pôle 3 fournit le fichier de poids (typing_checkpoint.pth) et une classe Agent capable de charger ces poids.
+L'entraînement dure quelques minutes. À la fin, deux fichiers sont créés :
+- `ppo_typing_v1.zip` — le modèle entraîné
+- `training_results.png` — graphique de progression
 
-Exécution : Le Pôle 2 (Serveur), lors d'une partie, va instancier l'Agent, charger les poids, et appeler la méthode agent.choose_action(state) à chaque "tick" de jeu pour obtenir l'action de l'IA.
+### 2. Lancer le serveur d'inférence
 
-#🔑 Tâches Clés
-[ ] 1. Environnement : Coder l'environnement de simulation (mock_env.py) en respectant l'API Gymnasium.
+Le serveur permet au frontend ou au serveur de jeu de demander l'action de l'IA via une API REST.
 
-[ ] 2. Modèle : Concevoir l'architecture du réseau (model.py) (Embedding + LSTM) pour traiter l'état textuel.
+```bash
+python inference_server.py
+```
 
-[ ] 3. Agent : Implémenter l'algorithme DQN (agent.py) avec la Mémoire de Rejeu.
+Le serveur démarre sur le **port 8000**. Endpoints :
 
-[ ] 4. Récompense : Itérer sur la fonction de récompense (Reward). C'est la tâche la plus critique pour équilibrer la vitesse et la précision.
+| Méthode | Route | Description |
+|---|---|---|
+| `POST` | `/predict` | Envoie `{ "obs": <int> }` → reçoit `{ "action": <int>, "char": "<lettre>" }` |
+| `GET` | `/health` | Vérifie que le serveur et le modèle sont opérationnels |
 
-[ ] 5. Entraînement : Implémenter le système de checkpointing dans train.py pour permettre un entraînement intermittent et robuste.
+Exemple d'appel :
+```bash
+curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d '{"obs": 0}'
+# Réponse : {"action": 0, "char": "a"}
+```
 
-[ ] 6. Intégration : Définir le "contrat d'état" final avec le Pôle 2 (comment la phrase est-elle exactement représentée ?).
+### 3. Client Raspberry Pi (borne arcade)
+
+Pour le fonctionnement directement sur la borne :
+
+```bash
+python rpi_bot_client.py
+```
+
+Ce script charge le modèle localement et exécute la boucle d'inférence sans passer par l'API.
+
+## Intégration avec le reste du projet
+
+L'intégration avec le serveur de jeu (Pôle 2) se fait via le **serveur d'inférence** :
+
+1. Le **serveur de jeu** envoie une requête `POST /predict` avec l'index de la lettre que l'IA doit taper.
+2. Le **serveur d'inférence** fait tourner le modèle PPO et renvoie la lettre choisie.
+3. Le serveur de jeu applique cette action dans la partie.
+
+Du point de vue du serveur, le bot IA se comporte exactement comme un joueur humain.

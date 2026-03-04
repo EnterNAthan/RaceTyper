@@ -49,27 +49,15 @@ export function useGlobalTyping({ isGameActive, isCompleted, userInput, targetPh
         e.preventDefault();
       }
 
-      // Handle space
-      else if (e.key === ' ' || e.code === 'Space' || e.key === 'Spacebar') {
-        next = userInput + ' ';
+      // Printable characters (single-char keys, including space)
+      else if (e.key && e.key.length === 1) {
+        next = userInput + e.key;
         e.preventDefault();
       }
-
-      // Printable characters (single-char keys)
-      else if (e.key && e.key.length === 1) {
-        // Enforce current word max length
-        const currentIndex = wordsCompleted || 0;
-        const afterLock = userInput.slice(lockedPrefixLength);
-        const spacePos = afterLock.indexOf(' ');
-        const typedSegment = spacePos >= 0 ? afterLock.slice(0, spacePos) : afterLock;
-        const currentWord = targetWords[currentIndex] || '';
-        if (typedSegment.length >= currentWord.length) {
-          // block extra characters beyond current word length
-          e.preventDefault();
-          return;
-        }
-        next = userInput + e.key;
-        // do not prevent default to allow potential sound shortcuts, but it's fine either way
+      else if (e.key === ' ' || e.code === 'Space' || e.key === 'Spacebar') {
+        // Space is still forwarded but auto-validate in useTypingGame handles word advance
+        next = userInput + ' ';
+        e.preventDefault();
       }
 
       if (next !== null) {

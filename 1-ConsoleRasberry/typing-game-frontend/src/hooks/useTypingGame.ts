@@ -97,27 +97,57 @@ export const useTypingGame = ({ targetPhrase = "", onPhraseComplete }: UseTyping
             nextInput = lockedPrefix + typedSegment; // drop any extra pasted content beyond the limit
         }
 
-        // Visual feedback on wrong letter but do not block typing
+        // Check if the newly typed character is wrong → reset current word
         const prev = state.userInput;
         if (nextInput.length > prev.length) {
-            const nextChar = nextInput.slice(-1);
-            // Do not block or flash on mere wrong letter; only feedback on validation below
-            // If the next char is a space, only accept it when the current word is correct
-            if (nextChar === ' ') {
+            const newCharIndex = nextInput.length - 1;
+            const expectedChar = cleanTarget[newCharIndex];
+            const typedChar = nextInput[newCharIndex];
+
+            // Space key: reject if current word isn't correct
+            if (typedChar === ' ') {
                 const withoutTrailing = nextInput.trimEnd();
                 const completedWords = withoutTrailing.length ? withoutTrailing.split(/\s+/) : [];
                 const idx = completedWords.length - 1;
-                const targetWords2 = cleanTarget.split(/\s+/);
-                if (idx >= 0 && completedWords[idx] !== targetWords2[idx]) {
-                    // Reject this space: do not move to the next word and show validation error
+                if (idx >= 0 && completedWords[idx] !== targetWords[idx]) {
                     setErrorsCount(prev => prev + 1);
                     window.dispatchEvent(new Event('word-invalid'));
                     return;
                 }
             }
+            // Wrong letter: reset the current word
+            else if (expectedChar !== undefined && typedChar !== expectedChar) {
+                setErrorsCount(prev => prev + 1);
+                window.dispatchEvent(new Event('word-invalid'));
+                // Reset input back to the locked prefix (erase current word progress)
+                nextInput = lockedPrefix;
+            }
         }
 
-    const progress = Math.min((nextInput.length / cleanTarget.length) * 100, 100);
+        // Auto-validate: if current word is fully and correctly typed, auto-advance
+        const afterLockNow = nextInput.slice(lockedPrefix.length);
+        const isLastWord = currentIndex === targetWords.length - 1;
+        if (afterLockNow.length > 0 && afterLockNow === currentWord && !isLastWord) {
+            // Append space to move to the next word automatically
+            nextInput = nextInput + ' ';
+            const newWordsCompleted = (state.wordsCompleted ?? 0) + 1;
+            const progress = Math.min((nextInput.length / cleanTarget.length) * 100, 100);
+            const accuracy = calculateAccuracy(cleanTarget, nextInput);
+            const currentTime = state.startTime ? (Date.now() - state.startTime) / 1000 : 0;
+
+            setState(prev => ({
+                ...prev,
+                userInput: nextInput,
+                progress,
+                accuracy,
+                timeTaken: currentTime,
+                wordsCompleted: newWordsCompleted,
+            }));
+            window.dispatchEvent(new Event('word-correct'));
+            return;
+        }
+
+        const progress = Math.min((nextInput.length / cleanTarget.length) * 100, 100);
         const accuracy = calculateAccuracy(cleanTarget, nextInput);
         const currentTime = state.startTime ? (Date.now() - state.startTime) / 1000 : 0;
 
@@ -129,12 +159,12 @@ export const useTypingGame = ({ targetPhrase = "", onPhraseComplete }: UseTyping
             timeTaken: currentTime,
         }));
 
-        // Check if game is completed
+        // Check if game is completed (last word fully typed)
         if (nextInput === cleanTarget) {
             const finalTime = state.startTime ? (Date.now() - state.startTime) / 1000 : 0;
             setState(prev => ({ ...prev, isGameActive: false, isCompleted: true, timeTaken: finalTime }));
+            window.dispatchEvent(new Event('word-correct'));
 
-            // Call completion callback with stats
             if (onPhraseComplete) {
                 onPhraseComplete({
                     timeTaken: finalTime,
@@ -142,20 +172,6 @@ export const useTypingGame = ({ targetPhrase = "", onPhraseComplete }: UseTyping
                     bonus: bonusWords,
                     malus: malusWords,
                 });
-            }
-        }
-
-        // Detect word completion only on insertion of a space (avoid firing on deletions)
-        const lastChar = nextInput.slice(-1);
-        const wasInsertion = nextInput.length > prev.length;
-        if (wasInsertion && lastChar === ' ') {
-            const wordsTyped = nextInput.trim().split(/\s+/);
-            const targetWords3 = cleanTarget.split(/\s+/);
-            const correctSoFar = wordsTyped.every((w, i) => w === targetWords3[i]);
-            if (correctSoFar && wordsTyped.length > (state.wordsCompleted ?? 0)) {
-                // increment wordsCompleted and fire event
-                setState(prev => ({ ...prev, wordsCompleted: (prev.wordsCompleted ?? 0) + 1 }));
-                window.dispatchEvent(new Event('word-correct'));
             }
         }
     }, [state.isGameActive, state.targetPhrase, state.startTime, state.wordsCompleted, state.userInput, calculateAccuracy, onPhraseComplete, errorsCount, bonusWords, malusWords]);

@@ -53,14 +53,13 @@ body.kiosk * {
 }
 
 /* ========== HEADER ========== */
-.app-header { 
-  display: flex; 
-  align-items: center; 
-  justify-content: space-between; 
-  padding: 20px 32px; 
-  background: rgba(17, 21, 32, 0.7); 
-  border-bottom: 1px solid var(--panel-border); 
-  backdrop-filter: blur(12px);
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 32px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-border);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -367,24 +366,23 @@ body.kiosk * {
   font-weight: 700;
 }
 
-@keyframes rainbow-shift { 
-  0% { filter: hue-rotate(0deg); } 
-  100% { filter: hue-rotate(360deg); } 
+@keyframes rainbow-shift {
+  0% { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
 }
 
-@keyframes pulse-alert { 
-  0%, 100% { transform: scale(1); opacity: 1; } 
-  50% { transform: scale(1.05); opacity: 0.9; } 
+/* Simplified pulse - no transform to reduce layout cost on Pi */
+@keyframes pulse-alert {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
-.typing-phrase .correct { 
+.typing-phrase .correct {
   color: var(--success);
-  animation: pop 120ms ease;
 }
 
-.typing-phrase .incorrect { 
+.typing-phrase .incorrect {
   color: var(--danger);
-  animation: wobble 200ms ease;
 }
 
 /* ========== INPUT ========== */
@@ -587,10 +585,8 @@ body.kiosk * {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(12px);
+  background: rgba(0, 0, 0, 0.9);
   z-index: 2000;
-  animation: fade-in 200ms ease;
 }
 
 .countdown-number {
@@ -617,58 +613,31 @@ body.kiosk * {
   }
 }
 
-.good-overlay { 
-  position: fixed; 
-  inset: 0; 
-  display: grid; 
-  place-items: center; 
-  pointer-events: none; 
-  animation: fade-out 600ms ease forwards;
-  z-index: 1000;
+/* Flash vert/rouge léger via pseudo-élément (pas de re-render React, optimal Pi) */
+body.flash-good::after,
+body.flash-bad::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
 }
 
-.good-overlay span { 
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--success);
-  text-shadow: 0 0 20px var(--success-glow);
-  animation: pop 160ms ease;
-  letter-spacing: 0.05em;
+body.flash-good::after {
+  background: rgba(16, 185, 129, 0.22);
 }
 
-.bad-overlay { 
-  position: fixed; 
-  inset: 0; 
-  display: grid; 
-  place-items: center; 
-  pointer-events: none; 
-  animation: fade-out 600ms ease forwards;
-  z-index: 1000;
-}
-
-.bad-overlay span { 
-  font-size: 32px;
-  font-weight: 700;
-  color: var(--danger);
-  text-shadow: 0 0 20px var(--danger-glow);
-  animation: wobble 200ms ease;
-  letter-spacing: 0.05em;
-}
-
-@keyframes fade-out { 
-  from { opacity: 1; } 
-  to { opacity: 0; } 
+body.flash-bad::after {
+  background: rgba(239, 68, 68, 0.22);
 }
 
 /* ========== WIN OVERLAY ========== */
-.win-overlay { 
-  position: fixed; 
-  inset: 0; 
-  display: grid; 
-  place-items: center; 
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
-  animation: fade-in 300ms ease;
+.win-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.8);
   z-index: 1000;
 }
 
@@ -730,14 +699,12 @@ body.kiosk * {
 }
 
 /* ========== GAME OVER OVERLAY ========== */
-.gameover-overlay { 
-  position: fixed; 
-  inset: 0; 
-  display: grid; 
-  place-items: center; 
-  background: rgba(139, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
-  animation: fade-in 300ms ease;
+.gameover-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(139, 0, 0, 0.7);
   z-index: 1000;
 }
 
@@ -810,6 +777,21 @@ body.kiosk * {
 
 .app.shake, body.shake {
   animation: screen-shake 160ms ease;
+}
+
+/* ========== LOBBY NAME EDIT ========== */
+.lobby-name-edit {
+  margin-bottom: 16px;
+}
+
+.lobby-name-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.lobby-name-row .typing-input {
+  flex: 1;
 }
 
 /* ========== LOBBY ========== */
@@ -935,10 +917,8 @@ body.kiosk * {
   display: grid;
   place-items: center;
   pointer-events: none;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.6);
   z-index: 1500;
-  animation: fade-in 200ms ease;
 }
 
 .sleep-box {

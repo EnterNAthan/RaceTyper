@@ -17,9 +17,7 @@ COPY . .
 
 # Étape 6: Exposer le port que votre serveur écoute
 # (FastAPI/Uvicorn tourne sur 8000 par défaut)
-EXPOSE 8000
+EXPOSE 8080
 
-# Étape 7: La commande pour démarrer votre serveur
-# Uvicorn lance l'app FastAPI (supposant que votre fichier principal s'appelle app.py
-# et que l'instance FastAPI s'appelle "app")
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Démarrer le serveur FastAPI
+CMD ["uvicorn", "server_app.app:app", "--host", "0.0.0.0", "--port", "8080"]

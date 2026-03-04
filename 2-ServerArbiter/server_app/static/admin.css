@@ -380,6 +380,8 @@ header h1::before {
 .card.logs h2::before { content: '▥'; font-size: 1.2rem; }
 .card.quick-actions h2::before { content: '⚡'; font-size: 1.2rem; }
 .card.round-stats h2::before { content: '◧'; font-size: 1.2rem; }
+.card.spectators h2::before { content: '◎'; font-size: 1.2rem; }
+.card.ia-control h2::before { content: '🤖'; font-size: 1.2rem; }
 
 /* ─────────────────────────────────────────────────────────────────────────────
    GAME STATE SECTION
@@ -811,6 +813,147 @@ header h1::before {
 
 .phrase-add textarea::placeholder {
     color: var(--text-muted);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   IA CONTROL PANEL
+   ───────────────────────────────────────────────────────────────────────────── */
+.ia-control .ia-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.ia-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.ia-status {
+    min-width: 90px;
+    text-align: center;
+}
+
+.ia-status.ia-on {
+    border-color: var(--neon-green);
+    color: var(--neon-green);
+    box-shadow: 0 0 15px var(--glow-green);
+}
+
+.ia-status.ia-off {
+    border-color: var(--neon-amber);
+    color: var(--neon-amber);
+    box-shadow: 0 0 10px var(--glow-amber);
+}
+
+.ia-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.ia-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ia-field label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+}
+
+.ia-field select {
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 2px;
+    border: 1px solid rgba(0, 255, 245, 0.2);
+    color: var(--text-primary);
+    padding: 8px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+}
+
+.ia-field select:focus {
+    outline: none;
+    border-color: var(--neon-cyan);
+    box-shadow: 0 0 15px rgba(0, 255, 245, 0.15);
+}
+
+.ia-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.ia-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+/* Style spécial pour le joueur IA dans les listes */
+.player-item.bot-player {
+    border-left-color: var(--neon-purple);
+    box-shadow: 0 0 18px rgba(191, 0, 255, 0.25);
+}
+
+.player-item .bot-tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    border-radius: 2px;
+    border: 1px solid var(--neon-purple);
+    color: var(--neon-purple);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.rank-item.bot-player {
+    border-color: rgba(191, 0, 255, 0.5);
+    box-shadow: 0 0 20px rgba(191, 0, 255, 0.25);
+}
+
+/* Style spécial pour les spectateurs */
+.player-item.spectator-item {
+    border-left-color: var(--neon-amber);
+}
+
+.player-item .spectator-tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    border-radius: 2px;
+    border: 1px solid var(--neon-amber);
+    color: var(--neon-amber);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.spectator-role {
+    color: var(--text-muted) !important;
+    text-shadow: none !important;
+    font-style: italic;
+}
+
+.rank-item .bot-tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    border-radius: 2px;
+    border: 1px solid var(--neon-purple);
+    color: var(--neon-purple);
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

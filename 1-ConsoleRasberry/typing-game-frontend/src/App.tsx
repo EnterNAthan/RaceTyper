@@ -15,11 +15,17 @@ type GameState = 'MENU' | 'COUNTDOWN' | 'PLAYING' | 'WIN' | 'GAMEOVER';
 
 const App: React.FC = () => {
     useArcadeEffects();
-    const { showGood, showBad } = useWordFeedback();
+    useWordFeedback();
     const { isFullscreen, enterFullscreen } = useKioskMode();
 
     const [roundResults, setRoundResults] = useState<PlayerData[]>([]);
     const [finalResults, setFinalResults] = useState<PlayerData[]>([]);
+
+    // Lobby name editing
+    const [editName, setEditName] = useState<string>(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('client') || localStorage.getItem('racetyper_client_id') || '';
+    });
 
     // Malus state
     const [inputDisabled, setInputDisabled] = useState(false);
@@ -81,7 +87,11 @@ const App: React.FC = () => {
         gameStatus,
         players,
         currentRound,
+        botActive,
+        botDifficulty,
         sendPhraseComplete,
+        connect,
+        disconnect,
     } = useServerConnection({
         onPhraseReceived: (phrase) => {
             console.log('New phrase received:', phrase);
@@ -110,6 +120,17 @@ const App: React.FC = () => {
         },
     });
 
+    const handleNameConfirm = useCallback(() => {
+        const name = editName.trim();
+        if (!name) return;
+        localStorage.setItem('racetyper_client_id', name);
+        const params = new URLSearchParams(window.location.search);
+        params.set('client', name);
+        history.replaceState(null, '', `?${params.toString()}`);
+        disconnect();
+        connect();
+    }, [editName, connect, disconnect]);
+
     // Typing game logic
     const {
         targetPhrase,
@@ -137,19 +158,40 @@ const App: React.FC = () => {
     // Multiplayer flag
     const isMultiplayer = connected;
 
-    // AI opponent settings
+    // AI opponent settings (solo mode)
     const [aiEnabled, setAiEnabled] = useState(false);
     const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('intermediate');
 
     // Countdown state
     const [countdown, setCountdown] = useState<number | null>(null);
 
+    // Map difficulté serveur -> difficulté IA locale
+    const mapServerDifficultyToAI = useCallback((d?: string): AIDifficulty => {
+        switch ((d || '').toLowerCase()) {
+            case 'debutant':
+                return 'beginner';
+            case 'moyen':
+                return 'intermediate';
+            case 'difficile':
+                return 'expert';
+            case 'impossible':
+                return 'impossible';
+            default:
+                return 'intermediate';
+        }
+    }, []);
+
+    const derivedAiEnabled = isMultiplayer ? botActive : aiEnabled;
+    const derivedAiDifficulty: AIDifficulty = isMultiplayer
+        ? mapServerDifficultyToAI(botDifficulty)
+        : aiDifficulty;
+
     const { aiInput, aiProgress, aiErrors, aiCompleted, difficultySettings, aiWPM } = useAIOpponent({
         targetPhrase,
         isGameActive,
         isCompleted,
-        aiEnabled,
-        difficulty: aiDifficulty
+        aiEnabled: derivedAiEnabled,
+        difficulty: derivedAiDifficulty
     });
 
     // Check for game completion (win) - only in solo mode
@@ -210,8 +252,31 @@ const App: React.FC = () => {
                         <h1 className="menu-title">RaceTyper</h1>
                         <p className="menu-subtitle">Course de frappe cooperative</p>
                         <div className="lobby-info">
-                            <p>Connect&eacute; en tant que : <strong>{clientId}</strong></p>
-                            <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>
+                            <div className="lobby-name-edit">
+                                <label className="menu-label" style={{ justifyContent: 'center', marginBottom: '8px' }}>
+                                    Votre nom
+                                </label>
+                                <div className="lobby-name-row">
+                                    <input
+                                        className="typing-input"
+                                        type="text"
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleNameConfirm(); }}
+                                        maxLength={20}
+                                        placeholder="Votre nom..."
+                                    />
+                                    <button className="btn primary" onClick={handleNameConfirm}>
+                                        Confirmer
+                                    </button>
+                                </div>
+                                {clientId && (
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '6px' }}>
+                                        Connecté en tant que : <strong>{clientId}</strong>
+                                    </p>
+                                )}
+                            </div>
+                            <p style={{ color: 'var(--text-muted)', marginTop: '16px' }}>
                                 En attente que l'arbitre d&eacute;marre la partie...
                             </p>
                             <div className="loader"></div>
@@ -358,17 +423,6 @@ const App: React.FC = () => {
                         )}
                     </header>
                     <main className="app-main">
-                        {showGood && (
-                            <div className="good-overlay" aria-live="polite">
-                                <span>Correct</span>
-                            </div>
-                        )}
-                        {showBad && (
-                            <div className="bad-overlay" aria-live="polite">
-                                <span>ERREUR&nbsp;!</span>
-                            </div>
-                        )}
-
                         {/* Malus overlays */}
                         {sirenActive && (
                             <div className="siren-overlay" aria-live="assertive">
@@ -501,12 +555,16 @@ const App: React.FC = () => {
                         </section>
 
                         {/* AI opponent display (solo mode only) */}
-                        {aiEnabled && !isMultiplayer && (
+                        {((!isMultiplayer && aiEnabled) || (isMultiplayer && botActive)) && (
                             <section className="typing-card ai-opponent" aria-label="AI opponent">
                                 <div className="ai-header">
                                     <div className="ai-title">
-                                        <span className="ai-label">Opponent</span>
-                                        <span className="ai-difficulty">{difficultySettings.name}</span>
+                                        <span className="ai-label">{isMultiplayer ? 'BOT-IA' : 'Opponent'}</span>
+                                        <span className="ai-difficulty">
+                                            {isMultiplayer && botDifficulty
+                                                ? botDifficulty
+                                                : difficultySettings.name}
+                                        </span>
                                     </div>
                                     <div className="ai-metrics">
                                         <div className="metric">
@@ -602,9 +660,16 @@ const App: React.FC = () => {
     );
 };
 
+let sirenAudioCtx: AudioContext | null = null;
 function playSirenSound() {
     try {
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        if (!sirenAudioCtx || sirenAudioCtx.state === 'closed') {
+            sirenAudioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        if (sirenAudioCtx.state === 'suspended') {
+            sirenAudioCtx.resume();
+        }
+        const ctx = sirenAudioCtx;
         const o = ctx.createOscillator();
         const g = ctx.createGain();
         o.type = 'sawtooth';
@@ -613,7 +678,7 @@ function playSirenSound() {
         o.connect(g);
         g.connect(ctx.destination);
         const now = ctx.currentTime;
-        o.start();
+        o.start(now);
         o.frequency.setValueAtTime(600, now);
         o.frequency.linearRampToValueAtTime(1200, now + 0.5);
         o.frequency.linearRampToValueAtTime(600, now + 1.0);

@@ -23,8 +23,9 @@ class AdminDashboard {
         this.gameStatus = document.getElementById('gameStatus');
         this.currentPhrase = document.getElementById('currentPhrase');
 
-        // Players & Ranking
+        // Players, Spectators & Ranking
         this.playersList = document.getElementById('playersList');
+        this.spectatorsList = document.getElementById('spectatorsList');
         this.rankingList = document.getElementById('rankingList');
 
         // Logs
@@ -35,6 +36,13 @@ class AdminDashboard {
         this.wsInRaw = document.getElementById('wsInRaw');
         this.wsOutRaw = document.getElementById('wsOutRaw');
         this.btnClearWsDebug = document.getElementById('btnClearWsDebug');
+
+        // IA / Bot
+        this.iaStatus = document.getElementById('iaStatus');
+        this.iaDifficulty = document.getElementById('iaDifficulty');
+        this.btnIaToggle = document.getElementById('btnIaToggle');
+        this.btnIaKick = document.getElementById('btnIaKick');
+        this.iaActive = false;
 
         // Stats
         this.statFinished = document.getElementById('statFinished');
@@ -91,6 +99,14 @@ class AdminDashboard {
         // WebSocket debug
         if (this.btnClearWsDebug) {
             this.btnClearWsDebug.addEventListener('click', () => this.clearWsDebug());
+        }
+
+        // IA / Bot controls
+        if (this.btnIaToggle) {
+            this.btnIaToggle.addEventListener('click', () => this.toggleIaBot());
+        }
+        if (this.btnIaKick) {
+            this.btnIaKick.addEventListener('click', () => this.kickIaBot());
         }
     }
 
@@ -182,6 +198,16 @@ class AdminDashboard {
                         .map(([client_id, score]) => ({ client_id, score }));
                     this.updateRanking(ranking);
                 }
+
+                // Mettre à jour l'état de l'IA si présent
+                if (data.bot) {
+                    this.updateIaState(data.bot);
+                }
+
+                // Mettre à jour la liste des spectateurs
+                if (data.spectators !== undefined) {
+                    this.updateSpectators(data.spectators);
+                }
                 break;
             case 'players_update':
                 this.updatePlayers(data.players, data.scores);
@@ -224,6 +250,9 @@ class AdminDashboard {
                 this.updateGameState(data);
                 this.updatePlayers(data.players, data.scores);
                 this.updatePhrasesList(data.phrases, data.current_phrase_index);
+                if (data.spectators) {
+                    this.updateSpectators(data.spectators);
+                }
             }
         } catch (error) {
             console.error('Error loading initial data:', error);
@@ -258,21 +287,58 @@ class AdminDashboard {
 
         this.playersList.innerHTML = '';
 
-        for (const [playerId] of Object.entries(players)) {
+        for (const [playerId, info] of Object.entries(players)) {
             const score = scores[playerId] || 0;
             const playerDiv = document.createElement('div');
-            playerDiv.className = 'player-item';
+            const isBot = info && (info.is_bot || playerId === 'BOT-IA');
+            playerDiv.className = 'player-item' + (isBot ? ' bot-player' : '');
             playerDiv.innerHTML = `
                 <div class="player-info">
-                    <div class="player-name">${playerId}</div>
+                    <div class="player-name">
+                        ${playerId}
+                        ${isBot ? '<span class="bot-tag">IA</span>' : ''}
+                    </div>
                     <div class="player-score">${score} points</div>
                 </div>
                 <div class="player-actions">
-                    <button class="btn btn-small btn-warning" onclick="dashboard.editPlayerScore('${playerId}')">Score</button>
-                    <button class="btn btn-small btn-danger" onclick="dashboard.kickPlayer('${playerId}')">Kick</button>
+                    ${isBot ? '' : `<button class="btn btn-small btn-warning" onclick="dashboard.editPlayerScore('${playerId}')">Score</button>`}
+                    ${isBot ? '' : `<button class="btn btn-small btn-danger" onclick="dashboard.kickPlayer('${playerId}')">Kick</button>`}
                 </div>
             `;
             this.playersList.appendChild(playerDiv);
+        }
+    }
+
+    updateSpectators(spectators) {
+        if (!spectators || spectators.length === 0) {
+            this.spectatorsList.innerHTML = '<p class="empty-state">Aucun spectateur connecté</p>';
+            return;
+        }
+
+        this.spectatorsList.innerHTML = '';
+
+        for (const specId of spectators) {
+            const specDiv = document.createElement('div');
+            specDiv.className = 'player-item spectator-item';
+            specDiv.innerHTML = `
+                <div class="player-info">
+                    <div class="player-name">
+                        ${specId}
+                        <span class="spectator-tag">SPEC</span>
+                    </div>
+                    <div class="player-score spectator-role">Lecture seule</div>
+                </div>
+                <div class="player-actions">
+                    <button class="btn btn-small btn-danger" onclick="dashboard.kickSpectator('${specId}')">Kick</button>
+                </div>
+            `;
+            this.spectatorsList.appendChild(specDiv);
+        }
+    }
+
+    kickSpectator(specId) {
+        if (confirm(`Expulser le spectateur ${specId} ?`)) {
+            this.sendCommand('kick_player', { player_id: specId });
         }
     }
 
@@ -286,7 +352,8 @@ class AdminDashboard {
 
         ranking.forEach((player, index) => {
             const rankDiv = document.createElement('div');
-            rankDiv.className = 'rank-item';
+            const isBot = player.client_id === 'BOT-IA';
+            rankDiv.className = 'rank-item' + (isBot ? ' bot-player' : '');
 
             let positionClass = '';
             if (index === 0) positionClass = 'gold';
@@ -298,7 +365,10 @@ class AdminDashboard {
             rankDiv.innerHTML = `
                 <div class="rank-position ${positionClass}">${medal}</div>
                 <div class="rank-info">
-                    <div class="rank-name">${player.client_id || player.name}</div>
+                    <div class="rank-name">
+                        ${player.client_id || player.name}
+                        ${isBot ? '<span class="bot-tag">IA</span>' : ''}
+                    </div>
                     <div class="rank-score">${player.score} points</div>
                 </div>
             `;
@@ -395,6 +465,34 @@ class AdminDashboard {
     clearWsDebug() {
         if (this.wsInRaw) this.wsInRaw.textContent = '';
         if (this.wsOutRaw) this.wsOutRaw.textContent = '';
+    }
+
+    // IA / Bot helpers
+    updateIaState(bot) {
+        this.iaActive = !!bot.active;
+        if (this.iaDifficulty && bot.difficulty) {
+            this.iaDifficulty.value = bot.difficulty;
+        }
+
+        if (this.iaStatus) {
+            this.iaStatus.textContent = this.iaActive ? 'Actif' : 'Inactif';
+            this.iaStatus.classList.toggle('ia-on', this.iaActive);
+            this.iaStatus.classList.toggle('ia-off', !this.iaActive);
+        }
+
+        if (this.btnIaToggle) {
+            this.btnIaToggle.textContent = this.iaActive ? 'Désactiver l\'IA' : 'Activer l\'IA';
+        }
+    }
+
+    toggleIaBot() {
+        const nextActive = !this.iaActive;
+        const difficulty = this.iaDifficulty ? this.iaDifficulty.value : 'debutant';
+        this.sendCommand('ia_set_state', { active: nextActive, difficulty });
+    }
+
+    kickIaBot() {
+        this.sendCommand('ia_kick');
     }
 
     // Game Control Actions
