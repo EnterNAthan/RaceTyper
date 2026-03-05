@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { TypingGameState } from '../types/game';
 
 interface UseTypingGameProps {
@@ -25,6 +25,8 @@ export const useTypingGame = ({ targetPhrase = "", onPhraseComplete }: UseTyping
     });
 
     const [errorsCount, setErrorsCount] = useState(0);
+    // Ref pour lire la valeur courante des erreurs de façon synchrone dans handleInputChange
+    const errorsRef = useRef(0);
     const [bonusWords, setBonusWords] = useState<string[]>([]);
     const [malusWords, setMalusWords] = useState<string[]>([]);
 
@@ -49,16 +51,11 @@ export const useTypingGame = ({ targetPhrase = "", onPhraseComplete }: UseTyping
         }
     }, [state.targetPhrase]);
 
-    const calculateAccuracy = useCallback((target: string, input: string): number => {
-        if (input.length === 0) return 100;
-        
-        let correctChars = 0;
-        for (let i = 0; i < Math.min(target.length, input.length); i++) {
-            if (target[i] === input[i]) {
-                correctChars++;
-            }
-        }
-        return Math.round((correctChars / input.length) * 100);
+    // Formule standard WPM : accuracy = nb_cibles / (nb_cibles + nb_erreurs)
+    // Chaque erreur est comptée comme une frappe incorrecte supplémentaire.
+    const calculateAccuracy = useCallback((target: string, currentErrors: number): number => {
+        if (currentErrors === 0) return 100;
+        return Math.max(0, Math.round(target.length / (target.length + currentErrors) * 100));
     }, []);
 
     const handleInputChange = useCallback((input: string) => {
@@ -110,14 +107,16 @@ export const useTypingGame = ({ targetPhrase = "", onPhraseComplete }: UseTyping
                 const completedWords = withoutTrailing.length ? withoutTrailing.split(/\s+/) : [];
                 const idx = completedWords.length - 1;
                 if (idx >= 0 && completedWords[idx] !== targetWords[idx]) {
-                    setErrorsCount(prev => prev + 1);
+                    errorsRef.current += 1;
+                    setErrorsCount(errorsRef.current);
                     window.dispatchEvent(new Event('word-invalid'));
                     return;
                 }
             }
             // Wrong letter: reset the current word
             else if (expectedChar !== undefined && typedChar !== expectedChar) {
-                setErrorsCount(prev => prev + 1);
+                errorsRef.current += 1;
+                setErrorsCount(errorsRef.current);
                 window.dispatchEvent(new Event('word-invalid'));
                 // Reset input back to the locked prefix (erase current word progress)
                 nextInput = lockedPrefix;
@@ -132,7 +131,7 @@ export const useTypingGame = ({ targetPhrase = "", onPhraseComplete }: UseTyping
             nextInput = nextInput + ' ';
             const newWordsCompleted = (state.wordsCompleted ?? 0) + 1;
             const progress = Math.min((nextInput.length / cleanTarget.length) * 100, 100);
-            const accuracy = calculateAccuracy(cleanTarget, nextInput);
+            const accuracy = calculateAccuracy(cleanTarget, errorsRef.current);
             const currentTime = state.startTime ? (Date.now() - state.startTime) / 1000 : 0;
 
             setState(prev => ({
@@ -148,7 +147,7 @@ export const useTypingGame = ({ targetPhrase = "", onPhraseComplete }: UseTyping
         }
 
         const progress = Math.min((nextInput.length / cleanTarget.length) * 100, 100);
-        const accuracy = calculateAccuracy(cleanTarget, nextInput);
+        const accuracy = calculateAccuracy(cleanTarget, errorsRef.current);
         const currentTime = state.startTime ? (Date.now() - state.startTime) / 1000 : 0;
 
         setState(prev => ({
@@ -174,10 +173,11 @@ export const useTypingGame = ({ targetPhrase = "", onPhraseComplete }: UseTyping
                 });
             }
         }
-    }, [state.isGameActive, state.targetPhrase, state.startTime, state.wordsCompleted, state.userInput, calculateAccuracy, onPhraseComplete, errorsCount, bonusWords, malusWords]);
+    }, [state.isGameActive, state.targetPhrase, state.startTime, state.wordsCompleted, state.userInput, calculateAccuracy, onPhraseComplete, bonusWords, malusWords]);
 
     const startGame = useCallback((overridePhrase?: string) => {
         // Start a new game, optionally with a new phrase (for round transitions)
+        errorsRef.current = 0;
         setErrorsCount(0);
         setState(prev => ({
             ...prev,

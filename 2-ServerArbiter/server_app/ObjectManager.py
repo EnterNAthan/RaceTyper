@@ -19,7 +19,9 @@ class ObjectManager:
 
     def __init__(self) -> None:
         self.bonus_effects = ["BOOST_SCORE_100", "BOOST_SCORE_200"]
-        self.malus_effects = ["TRIGGER_SIREN", "SCREEN_SHAKE", "SLEEP", "SWAPKEY"] 
+        # Seul SCREEN_SHAKE est déclenché automatiquement par les mots malus des phrases.
+        # TRIGGER_SIREN, SLEEP et SWAPKEY sont réservés à l'app mobile (send_malus).
+        self.malus_effects = ["SCREEN_SHAKE"]
     
     
     def get_word_status(self, current_phrase: str, current_word_index: int) -> Optional[Tuple[str, str]]:
