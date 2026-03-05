@@ -294,13 +294,6 @@ private fun PlayerMalusCard(
                     onClick = { onSendMalus(MalusType.DISABLE_KEYBOARD) },
                     modifier = Modifier.weight(1f)
                 )
-                MalusButton(
-                    label = "Sirène",
-                    icon = Icons.Default.NotificationsActive,
-                    color = Color(0xFFFFAB40),
-                    onClick = { onSendMalus(MalusType.PHYSICAL_DISTRACTION) },
-                    modifier = Modifier.weight(1f)
-                )
             }
         }
     }
