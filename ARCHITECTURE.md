@@ -45,18 +45,18 @@ Ce diagramme représente la **vue macro du système distribué**. Le cœur est l
 ```mermaid
 graph TB
     subgraph "Raspberry Pi 1..N"
-        FE["🖥️ Frontend React\n(port 5173)"]
-        GPIO["⚡ GPIO Service\n(port 5001)\nFastAPI"]
-        SIREN["🔔 Sirène / LED\nGPIO pins 17-18"]
+        FE["Frontend React\n(port 5173)"]
+        GPIO["GPIO Service\n(port 5001)\nFastAPI"]
+        SIREN["Sirène / LED\nGPIO pins 17-18"]
         FE -- "HTTP POST /siren_on\n/led_on" --> GPIO
         GPIO -- "RPi.GPIO" --> SIREN
     end
 
     subgraph "Serveur Central"
-        SRV["🎮 Server Arbitre\nFastAPI (port 8080)"]
+        SRV["Server Arbitre\nFastAPI (port 8080)"]
         GM["GameManager\n(logique de jeu)"]
         OM["ObjectManager\n(bonus/malus)"]
-        DB[("🗄️ PostgreSQL\n(port 5434)")]
+        DB[("PostgreSQL\n(port 5434)")]
         MQTT_B["MQTT Bridge\n(paho-mqtt)"]
         SRV --> GM
         SRV --> OM
@@ -64,15 +64,15 @@ graph TB
     end
 
     subgraph "Broker MQTT"
-        BROKER["📡 MQTT Broker\n(port 1883)"]
+        BROKER["MQTT Broker\n(port 1883)"]
     end
 
     subgraph "IA Engine"
-        IA["🤖 Inference Server\nPPO Model\n(port 8000)"]
+        IA["Inference Server\nPPO Model\n(port 8000)"]
     end
 
     subgraph "Mobile (Android)"
-        APP["📱 App Kotlin\nJetpack Compose"]
+        APP["App Kotlin\nJetpack Compose"]
     end
 
     FE -- "WebSocket\n/ws/{client_id}" --> SRV
@@ -423,8 +423,8 @@ flowchart TD
     TRY_ASYNC["Essai asyncpg\n(driver async natif)"]
     TRY_SYNC["Fallback pg8000\n(pure Python)"]
     RETRY["Retry × 5\n(délai 2s)"]
-    OK["✅ Connexion établie"]
-    FAIL["❌ Échec"]
+    OK["Connexion établie"]
+    FAIL["Échec"]
 
     START --> TRY_ASYNC
     TRY_ASYNC -- "Succès" --> OK
@@ -548,7 +548,7 @@ Ce diagramme représente l'**infrastructure réseau LAN** attendue en conditions
 ```mermaid
 graph TB
     subgraph "Réseau local (LAN)"
-        R["🌐 Routeur\n192.168.1.x"]
+        R["Routeur\n192.168.1.x"]
 
         subgraph "Serveur central"
             SRV["Server Arbitre\n:8080"]
@@ -617,7 +617,7 @@ flowchart TD
     J2 --> S2["npm install\ntsc --noEmit\nvite build"]
     J3 --> S3["python -m py_compile\n(syntax check)"]
 
-    S1 --> OK["✅ CI Pass"]
+    S1 --> OK["CI Pass"]
     S2 --> OK
     S3 --> OK
 ```
@@ -632,14 +632,14 @@ Ce diagramme est la **carte de navigation globale** du projet. Il montre que le 
 
 ```mermaid
 graph LR
-    ADMIN["👤 Admin\n(navigateur)"]
-    PI["🖥️ Raspberry Pi\n(1 à N)"]
-    MOB["📱 Mobile Android"]
-    SRV["🎮 Server Arbitre\n:8080"]
-    DB[("🗄️ PostgreSQL\n:5434")]
-    MQTT["📡 MQTT Broker\n:1883"]
-    GPIO["⚡ GPIO Service\n:5001"]
-    IA["🤖 IA Engine\n:8000"]
+    ADMIN["Admin\n(navigateur)"]
+    PI["Raspberry Pi\n(1 à N)"]
+    MOB["Mobile Android"]
+    SRV["Server Arbitre\n:8080"]
+    DB[("PostgreSQL\n:5434")]
+    MQTT["MQTT Broker\n:1883"]
+    GPIO["GPIO Service\n:5001"]
+    IA["IA Engine\n:8000"]
 
     ADMIN -- "WS /ws/admin-dashboard\nCommandes admin" --> SRV
     PI -- "WS /ws/{client_id}\nFrappe + résultats" --> SRV
