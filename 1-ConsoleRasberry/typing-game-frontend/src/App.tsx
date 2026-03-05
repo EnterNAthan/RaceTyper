@@ -89,6 +89,7 @@ const App: React.FC = () => {
         currentRound,
         botActive,
         botDifficulty,
+        botProgress,
         sendPhraseComplete,
         connect,
         disconnect,
@@ -190,9 +191,17 @@ const App: React.FC = () => {
         targetPhrase,
         isGameActive,
         isCompleted,
-        aiEnabled: derivedAiEnabled,
+        // En multijoueur, le bot est géré côté serveur : désactiver le hook local
+        aiEnabled: !isMultiplayer && derivedAiEnabled,
         difficulty: derivedAiDifficulty
     });
+
+    // En multijoueur, on utilise les données de progression diffusées par le serveur.
+    // En solo, on utilise le hook useAIOpponent local.
+    const displayAiProgress = isMultiplayer ? (botProgress?.progress ?? 0) : aiProgress;
+    const displayAiInput    = isMultiplayer ? (botProgress?.currentText ?? '') : aiInput;
+    const displayAiErrors   = isMultiplayer ? (botProgress?.errors ?? 0) : aiErrors;
+    const displayAiWPM      = isMultiplayer ? (botProgress?.wpm ?? 0) : aiWPM;
 
     // Check for game completion (win) - only in solo mode
     useEffect(() => {
@@ -569,28 +578,28 @@ const App: React.FC = () => {
                                     <div className="ai-metrics">
                                         <div className="metric">
                                             <span className="metric-label">Progress</span>
-                                            <span className="metric-value">{aiProgress.toFixed(1)}%</span>
+                                            <span className="metric-value">{displayAiProgress.toFixed(1)}%</span>
                                         </div>
                                         <div className="metric">
                                             <span className="metric-label">WPM</span>
-                                            <span className="metric-value">{aiWPM}</span>
+                                            <span className="metric-value">{displayAiWPM}</span>
                                         </div>
                                         <div className="metric">
                                             <span className="metric-label">Chars</span>
-                                            <span className="metric-value">{aiInput.length}</span>
+                                            <span className="metric-value">{displayAiInput.length}</span>
                                         </div>
                                         <div className="metric">
                                             <span className="metric-label">Errors</span>
-                                            <span className={`metric-value ${aiErrors > 0 ? 'error' : ''}`}>{aiErrors}</span>
+                                            <span className={`metric-value ${displayAiErrors > 0 ? 'error' : ''}`}>{displayAiErrors}</span>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="ai-typing">
                                     <div className="ai-line">
-                                        {aiInput || <span className="ai-placeholder">Waiting for opponent...</span>}
+                                        {displayAiInput || <span className="ai-placeholder">Waiting for opponent...</span>}
                                     </div>
                                     <div className="ai-progress">
-                                        <ProgressBar progress={aiProgress} />
+                                        <ProgressBar progress={displayAiProgress} />
                                     </div>
                                 </div>
                             </section>

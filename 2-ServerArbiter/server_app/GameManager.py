@@ -5,6 +5,7 @@ et l'interface admin via WebSocket. Persistance PostgreSQL optionnelle.
 
 from .ObjectManager import ObjectManager
 from .mqtt_bridge import MQTTBridge, ALLOWED_MALUS_TYPES
+import re
 import random
 import time
 import asyncio
@@ -1196,6 +1197,42 @@ class GameManager:
 
         # Calculer une durée simulée pour taper la phrase
         time_taken, errors, objects_triggered = await self._generate_bot_round_stats(phrase)
+
+        # Nettoyer les balises ^^mot^^ et &mot& pour obtenir le texte brut
+        clean_phrase = re.sub(r'\^([^\s]+)\^', r'\1', phrase)
+        clean_phrase = re.sub(r'&([^\s]+)&', r'\1', clean_phrase)
+        total_chars = max(1, len(clean_phrase))
+
+        # Diffuser la progression du bot en temps réel toutes les 0.5s
+        # Ainsi tous les clients (RPi inclus) voient l'animation sans appeler le moteur IA
+        STEP = 0.5
+        loop = asyncio.get_event_loop()
+        start_ts = loop.time()
+        elapsed = 0.0
+
+        while elapsed < time_taken:
+            await asyncio.sleep(min(STEP, time_taken - elapsed))
+            elapsed = loop.time() - start_ts
+
+            if not self.bot_active or self.game_status != "playing":
+                return
+
+            ratio = min(1.0, elapsed / time_taken)
+            chars_done = int(ratio * total_chars)
+            wpm = round((chars_done / 5) / max(0.01, elapsed / 60))
+            await self.broadcast({
+                "type": "bot_progress",
+                "bot_id": self.bot_id,
+                "progress": round(ratio * 100, 1),
+                "chars_typed": chars_done,
+                "current_text": clean_phrase[:chars_done],
+                "wpm": wpm,
+                "errors": int(ratio * errors),
+            })
+
+        # Re-vérifier après la boucle
+        if not self.bot_active or self.game_status != "playing":
+            return
 
         # Enregistrer le résultat du bot pour cette manche
         self.current_round_results[self.bot_id] = {

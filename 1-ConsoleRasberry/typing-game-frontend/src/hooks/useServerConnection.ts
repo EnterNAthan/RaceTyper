@@ -11,6 +11,14 @@ export interface PlayerData {
     rank?: number;
 }
 
+export interface BotProgress {
+    progress: number;      // 0-100
+    charsTyped: number;
+    currentText: string;
+    wpm: number;
+    errors: number;
+}
+
 export interface ServerConnectionState {
     connected: boolean;
     clientId: string;
@@ -21,6 +29,7 @@ export interface ServerConnectionState {
     totalRounds: number;
     botActive: boolean;
     botDifficulty?: string;
+    botProgress: BotProgress | null;
 }
 
 interface UseServerConnectionProps {
@@ -62,6 +71,7 @@ export const useServerConnection = ({
         totalRounds: 5,
         botActive: false,
         botDifficulty: undefined,
+        botProgress: null,
     });
 
     const wsRef = useRef<WebSocket | null>(null);
@@ -228,6 +238,21 @@ export const useServerConnection = ({
                         ...prev,
                         botActive: !!message.active,
                         botDifficulty: message.difficulty,
+                        // Reset progress when bot state changes
+                        botProgress: message.active ? prev.botProgress : null,
+                    }));
+                    break;
+
+                case 'bot_progress':
+                    setState(prev => ({
+                        ...prev,
+                        botProgress: {
+                            progress: message.progress ?? 0,
+                            charsTyped: message.chars_typed ?? 0,
+                            currentText: message.current_text ?? '',
+                            wpm: message.wpm ?? 0,
+                            errors: message.errors ?? 0,
+                        },
                     }));
                     break;
 

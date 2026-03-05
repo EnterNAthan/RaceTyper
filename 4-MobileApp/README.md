@@ -1,175 +1,222 @@
-# 📱 Pôle 4 – Application Mobile (Android)
+# Pôle 4 – Application Mobile (Android)
 
-Application Android pour RaceTyper : visualisation en temps réel de la partie **et** interface **Game Master** permettant d'envoyer des malus aux joueurs en course.
+Application Android permettant de suivre une partie RaceTyper en temps réel et d'interagir avec les joueurs depuis le rôle de Game Master.
 
-## 🧠 Comment ça marche
+## Rôle dans le projet
 
-L'app se connecte au serveur via **WebSocket** (`ws://<ip>:<port>/ws/mobile-spectator`) et remplit deux rôles :
+L'application couvre deux fonctions distinctes sur la même connexion WebSocket :
 
-1. **Spectateur temps réel** — reçoit tous les événements de jeu (scores, manches, classement…) et les affiche en direct.
-2. **Game Master** — permet d'envoyer des **malus** (pénalités) aux joueurs actifs pour perturber leur course.
+- **Spectateur** : reçoit les événements de jeu poussés par le serveur (scores, manches, classement) et les affiche en continu.
+- **Game Master** : envoie des malus ciblés aux joueurs en course pour perturber leur session.
 
-Le flux de données est **bidirectionnel** :
-- **Réception** : le serveur pousse les événements JSON → l'app met à jour son interface via Kotlin Flows.
-- **Envoi** : l'utilisateur déclenche un malus → l'app envoie un message JSON au serveur via la même WebSocket.
+## Éléments mis en place
 
-## 📱 Écrans de l'application
+### Connexion WebSocket comme spectateur
 
-### Accueil
-- Badge de connexion animé (**LIVE** / **OFF**) en haut de l'écran.
-- **Statut de la partie** : état du jeu (En attente / Course en cours / Pause / Terminée), phrase en cours, numéro de manche, nombre de joueurs.
-- **Mini classement** : top 3 des joueurs avec bouton vers le classement complet.
-- **Carte serveur** (visible si déconnecté) : affiche l'adresse du serveur et un bouton de connexion.
+L'application se connecte en tant que `mobile-spectator` sur l'endpoint `/ws/mobile-spectator`. Cet identifiant permet au serveur de distinguer les consoles de jeu des simples observateurs.
 
-### Classement
-- Classement complet de tous les joueurs, trié par score décroissant.
-- Badges podium (🥇 or, 🥈 argent, 🥉 bronze) pour les trois premiers.
-- Mise à jour en temps réel à chaque fin de manche.
+La connexion est gérée par `RaceTyperWebSocket`, avec reconnexion automatique à backoff exponentiel (de 1 s à 30 s). La méthode `send()` permet l'envoi bidirectionnel sur cette même connexion.
 
-### Contrôle Joueurs (Game Master)
-- Liste des joueurs actifs en course (filtrée automatiquement : pas de bots ni de spectateurs).
-- Pour chaque joueur, **3 boutons de malus** :
-  - **GIF Intrusif** — affiche un GIF distrayant sur l'écran de la borne.
-  - **Bloquer Clavier** — bloque le clavier physique du joueur pendant 1 seconde.
-  - **Distraction Physique** — déclenche la sirène et les LEDs de la Raspberry Pi.
-- Feedback visuel via Snackbar après chaque envoi.
-- Gestion des états : déconnecté, aucun joueur, liste active.
+### Interface Game Master
 
-### Paramètres
-- Configuration de l'adresse IP du serveur (sauvegardée sur l'appareil).
-- Par défaut : `192.168.1.100:8000`.
+Un écran dédié `PlayersControlScreen` liste les joueurs actifs en cours de partie. Pour chaque joueur, trois malus sont proposés :
 
-## 🏗️ Architecture technique
+| Malus | Effet |
+|---|---|
+| `intrusive_gif` | Affiche un GIF plein écran sur la borne pendant 3 s |
+| `disable_keyboard` | Bloque le clavier physique du joueur pendant 1 s |
+| `physical_distraction` | Déclenche la sirène et les LEDs de la Raspberry Pi via GPIO |
 
-```
-MainActivity
- └── Scaffold + Barre de navigation (4 onglets)
-      └── NavGraph
-           ├── HomeScreen
-           ├── RankingsScreen
-           ├── PlayersControlScreen   ← Game Master (malus)
-           └── SettingsScreen
-                    │
-              GameViewModel (partagé entre tous les écrans)
-                    │
-              GameRepository
-              ┌─────┴──────┐
-     RaceTyperWebSocket   SettingsManager
-     (client OkHttp)      (DataStore)
+Le filtre des joueurs affichés exclut automatiquement les bots et les spectateurs via `getActivePlayersForControl()`. Un feedback visuel (Snackbar) confirme chaque envoi ou signale une erreur.
+
+### Modèles de données
+
+`Models.kt` contient l'enum `MalusType` — chaque entrée porte son `key` JSON, un label affiché et une description — ainsi que `MalusPayload`, le DTO sérialisé envoyé au serveur :
+
+```json
+{ "action": "send_malus", "target_player_id": "pi-1", "malus_type": "disable_keyboard" }
 ```
 
-**Flux de données** : Serveur → WebSocket → StateFlow → Repository → ViewModel → UI Compose.
-Tout est réactif et unidirectionnel.
+### Feedback et gestion d'erreurs
 
-### Technologies utilisées
+`MalusSendResult` est une sealed class (Success / Failure) émise via un `SharedFlow` dans le ViewModel. L'UI la collecte avec `LaunchedEffect` pour afficher la Snackbar sans rejouer l'événement à chaque recomposition.
 
-| Technologie | Rôle |
-|---|---|
-| **Kotlin** | Langage principal |
-| **Jetpack Compose** + Material3 | Interface utilisateur |
-| **OkHttp 4.12** | Client WebSocket |
-| **Gson 2.10** | Parsing JSON des messages serveur |
-| **Navigation Compose** | Navigation entre les écrans |
-| **DataStore Preferences** | Persistance des paramètres (URL serveur) |
-| **Coroutines + Flows** | Programmation asynchrone et réactive |
+## Problèmes rencontrés et solutions
 
-### Messages WebSocket gérés
+### L'app bloquait les manches côté serveur
 
-L'app sait interpréter tous les messages envoyés par le serveur :
+**Problème** : le serveur attendait la fin de round en comptant `len(active_players)`. L'app mobile, connectée comme un joueur ordinaire, était incluse dans ce décompte. Une manche ne pouvait pas se terminer tant que l'app n'envoyait pas de résultat.
 
-| Message | Effet |
-|---|---|
-| `connection_accepted` | Confirmation de connexion |
-| `game_status` | Mise à jour du statut (attente, jeu, pause…) |
-| `player_update` | Mise à jour des scores et de la liste de joueurs |
-| `new_phrase` | Nouvelle phrase + numéro de manche |
-| `round_classement` | Résultats de fin de manche (classement + scores) |
-| `game_over` | Scores finaux, partie terminée |
-| `game_paused` / `game_reset` | Pause ou réinitialisation |
-| `state_update` | Synchronisation complète de l'état |
-| `round_wait` | Attente des autres joueurs |
-| `admin_message` | Message de l'administrateur |
-| `kicked` | Expulsion (arrêt de la reconnexion) |
+**Solution** : le serveur distingue maintenant les clients par leur identifiant. Tout client dont l'ID commence par `mobile` ou contient `-spectator` est placé dans un dictionnaire `spectators` séparé. Les spectateurs reçoivent les broadcasts mais ne sont pas comptabilisés dans les résultats de manche.
 
-L'app envoie également des messages au serveur :
+### Choix du canal pour les malus UI
 
-| Message | Payload |
-|---|---|
-| `send_malus` | `{"action": "send_malus", "target_player_id": "<id>", "malus_type": "<type>"}` |
+**Problème initial** : la première implémentation routait tous les malus via MQTT. Pour les malus d'interface (`intrusive_gif`, `disable_keyboard`), cela imposait un bridge WebSocket local sur chaque Pi pour relayer le message au frontend React — une dépendance et un port supplémentaire sur chaque console.
 
-Types de malus : `intrusive_gif`, `disable_keyboard`, `physical_distraction`.
+**Solution retenue** : le serveur envoie directement les malus UI via le WebSocket existant vers la console Pi cible. MQTT est conservé uniquement pour `physical_distraction`, qui doit déclencher du matériel (GPIO). Résultat : les malus UI n'ont aucune dépendance au broker MQTT, et le `client_id` du Pi reste la seule source de vérité — aucune variable `CONSOLE_ID` supplémentaire à synchroniser.
 
-## 🛠️ Installation
+## Choix de conception
 
-### Prérequis
+### Une seule connexion WebSocket pour recevoir et envoyer
 
-- **Android Studio** (avec Kotlin et les SDKs Android à jour)
-- Un appareil Android ou un émulateur (API 24 minimum, soit Android 7.0+)
-- Le serveur RaceTyper (Pôle 2) doit être lancé et accessible sur le réseau
+L'app utilise une unique connexion pour recevoir les événements et envoyer les malus. Créer une connexion dédiée pour l'envoi aurait complexifié la gestion des états de connexion et doublé la logique de reconnexion.
 
-### Lancer l'application
+### StateFlow pour l'état durable, SharedFlow pour les événements ponctuels
 
-1. Ouvrir le dossier `4-MobileApp` dans Android Studio.
-2. Attendre la synchronisation Gradle.
-3. Lancer sur un émulateur ou un appareil physique.
+Les états persistants (scores, liste de joueurs, statut) utilisent `StateFlow` : l'UI retrouve la dernière valeur à tout moment, même après une recomposition.
 
-### Configurer la connexion
+Les événements ponctuels (feedback malus, messages admin, kick) utilisent `SharedFlow` avec buffer. Un `StateFlow` aurait rejoué le dernier événement à chaque nouveau collecteur, ce qui provoquerait des Snackbars fantômes ou des alertes dupliquées.
 
-Par défaut, l'app essaie de se connecter à `192.168.1.100:8000`. Pour changer :
+### ViewModel partagé entre tous les écrans
 
-1. Aller dans l'onglet **Paramètres** de l'app.
-2. Saisir l'adresse IP et le port du serveur (ex : `192.168.1.50:8000`).
-3. Appuyer sur **Sauvegarder** — l'adresse est persistée sur l'appareil.
+Un seul `GameViewModel` est partagé via `viewModels()` dans `MainActivity`. La connexion WebSocket reste ainsi active quelle que soit la navigation entre les onglets — cohérent avec un rôle de spectateur où les mises à jour doivent continuer en arrière-plan.
 
-L'app se reconnecte automatiquement en cas de perte de connexion (backoff exponentiel de 1s à 30s).
+## Architecture
 
-## 📁 Structure du code
+```mermaid
+flowchart TD
+    MA[MainActivity] --> NG[NavGraph]
+    NG --> HS[HomeScreen]
+    NG --> RS[RankingsScreen]
+    NG --> PC[PlayersControlScreen Game Master]
+    NG --> SS[SettingsScreen]
+
+    HS & RS & PC & SS --> VM[GameViewModel]
+    VM --> GR[GameRepository]
+    GR --> WS[RaceTyperWebSocket OkHttp]
+    GR --> SM[SettingsManager DataStore]
+    WS <-->|WebSocket /ws/mobile-spectator| SRV[Server]
+```
+
+L'application est organisée en couches, chacune ayant une responsabilité unique.
+
+**Couche UI** — `MainActivity` instancie le `NavGraph` qui gère la navigation entre les quatre écrans. Chaque écran est un composable Compose sans logique métier propre : il observe des états et délègue les actions au ViewModel.
+
+**Couche ViewModel** — `GameViewModel` est créé une seule fois dans `MainActivity` et partagé entre tous les écrans via `viewModels()`. Il reste donc en vie pendant toute la session, même quand l'utilisateur change d'onglet. C'est lui qui vérifie l'état de connexion avant d'autoriser un envoi de malus, et qui convertit les résultats bruts en événements consommables par l'UI.
+
+**Couche Repository** — `GameRepository` est la seule source de vérité. Il ne fait pas de logique : il expose directement les `StateFlow` du WebSocket et fournit `sendMalus()` qui sérialise le payload JSON et l'envoie via `RaceTyperWebSocket.send()`.
+
+**Couche réseau** — `RaceTyperWebSocket` gère la connexion OkHttp, le parsing des messages entrants, la reconnexion automatique et l'envoi sortant. C'est la seule classe qui touche au réseau.
+
+**Persistance** — `SettingsManager` utilise DataStore pour sauvegarder uniquement l'URL du serveur. Il est complètement indépendant du WebSocket : une URL peut être modifiée dans les paramètres sans couper la connexion en cours.
+
+### Flux de données entrant
+
+```mermaid
+sequenceDiagram
+    participant S as Serveur
+    participant WS as RaceTyperWebSocket
+    participant VM as GameViewModel
+    participant UI as Compose UI
+
+    S->>WS: message JSON (player_update, new_phrase…)
+    WS->>WS: handleMessage() → StateFlow mis à jour
+    WS-->>VM: StateFlow exposé via Repository
+    VM-->>UI: collectAsState() → recomposition automatique
+```
+
+Le serveur pousse des messages JSON en continu. `RaceTyperWebSocket` les parse et met à jour les `StateFlow` correspondants. Compose observe ces flows via `collectAsState()` : dès qu'une valeur change, seuls les composants concernés sont recomposés, sans action manuelle dans l'UI.
+
+### Flux d'envoi d'un malus
+
+```mermaid
+sequenceDiagram
+    participant UI as PlayersControlScreen
+    participant VM as GameViewModel
+    participant WS as RaceTyperWebSocket
+    participant S as Serveur
+
+    UI->>VM: sendMalus("pi-1", DISABLE_KEYBOARD)
+    VM->>VM: vérifie ConnectionState.Connected
+    VM->>WS: send(gson.toJson(MalusPayload))
+    WS->>S: {"action":"send_malus","target_player_id":"pi-1","malus_type":"disable_keyboard"}
+    VM->>VM: emit MalusSendResult.Success
+    VM-->>UI: Snackbar de confirmation
+```
+
+Avant d'envoyer, le ViewModel vérifie que l'état de connexion est `Connected`. Si ce n'est pas le cas, un `MalusSendResult.Failure` est émis directement sans toucher au WebSocket. En cas d'envoi réussi, la confirmation (`Success`) transite par un `SharedFlow` collecté via `LaunchedEffect` dans l'UI — ce qui garantit que la Snackbar ne s'affiche qu'une seule fois même si l'écran est recomposé.
+
+## Structure du code
 
 ```
 app/src/main/java/com/example/racetyper/
-├── MainActivity.kt              # Point d'entrée, barre de navigation
+├── MainActivity.kt
 ├── data/
-│   ├── SettingsManager.kt       # Persistance de l'URL serveur (DataStore)
+│   ├── SettingsManager.kt          
 │   ├── model/
-│   │   └── Models.kt            # Modèles de données (Player, GameState, MalusPayload…)
+│   │   └── Models.kt               
 │   ├── repository/
-│   │   └── GameRepository.kt    # Source unique, expose Flows + sendMalus()
+│   │   └── GameRepository.kt       
 │   └── websocket/
-│       └── RaceTyperWebSocket.kt # Client WebSocket OkHttp + send() + reconnexion
+│       └── RaceTyperWebSocket.kt   
 └── ui/
-    ├── components/               # Composants réutilisables
-    │   ├── CommonUi.kt           #   Fond animé + cartes glassmorphism
-    │   ├── ConnectionStatus.kt   #   Badge de connexion (LIVE/OFF)
-    │   ├── PlayerCard.kt         #   Carte de joueur avec badge podium
-    │   └── ScoreBoard.kt         #   Mini classement
+    ├── components/
+    │   ├── CommonUi.kt
+    │   ├── ConnectionStatus.kt
+    │   ├── PlayerCard.kt
+    │   └── ScoreBoard.kt
     ├── navigation/
-    │   └── NavGraph.kt           # Routes de navigation (4 écrans)
-    ├── screens/                  # Écrans principaux
-    │   ├── HomeScreen.kt         #   Dashboard / accueil
-    │   ├── RankingsScreen.kt     #   Classement complet
-    │   ├── PlayersControlScreen.kt #  Game Master : envoi de malus
-    │   └── SettingsScreen.kt     #   Configuration serveur
-    ├── theme/                    # Thème sombre néon (violet/cyan)
+    │   └── NavGraph.kt
+    ├── screens/
+    │   ├── HomeScreen.kt
+    │   ├── RankingsScreen.kt
+    │   ├── PlayersControlScreen.kt 
+    │   └── SettingsScreen.kt
+    ├── theme/
     │   ├── Color.kt
     │   ├── Theme.kt
     │   └── Type.kt
     └── viewmodel/
-        └── GameViewModel.kt     # ViewModel partagé, logique de connexion
+        └── GameViewModel.kt
 ```
 
-## ✅ État des fonctionnalités
+## Messages WebSocket
+
+Messages reçus du serveur :
+
+| Type | Effet |
+|---|---|
+| `connection_accepted` | Confirmation de connexion |
+| `game_status` | Statut global (waiting, playing, paused…) |
+| `player_update` | Scores et liste des joueurs |
+| `new_phrase` | Nouvelle phrase et numéro de manche |
+| `round_classement` | Résultats de fin de manche |
+| `game_over` | Scores finaux |
+| `game_paused` / `game_reset` | Pause ou réinitialisation |
+| `state_update` | Synchronisation complète |
+| `round_wait` | Attente des autres joueurs |
+| `admin_message` | Message texte de l'administrateur |
+| `kicked` | Expulsion, reconnexion arrêtée |
+
+Message envoyé au serveur :
+
+| Type | Payload |
+|---|---|
+| `send_malus` | `{"action":"send_malus","target_player_id":"<id>","malus_type":"<type>"}` |
+
+## Installation
+
+L'application nécessite Android Studio, un appareil ou émulateur API 24 minimum, et le serveur (Pôle 2) accessible sur le réseau.
+
+1. Ouvrir le dossier `4-MobileApp` dans Android Studio.
+2. Laisser Gradle se synchroniser.
+3. Lancer sur un appareil physique ou un émulateur.
+
+Par défaut, l'app tente de se connecter à `192.168.1.100:8000`. L'adresse est modifiable dans l'onglet Paramètres et persistée sur l'appareil.
+
+## État des fonctionnalités
 
 | Fonctionnalité | Statut |
 |---|---|
-| Connexion WebSocket au serveur | ✅ Opérationnel |
-| Reconnexion automatique | ✅ Opérationnel |
-| Affichage du statut de la partie en direct | ✅ Opérationnel |
-| Scores en temps réel | ✅ Opérationnel |
-| Classement avec podium | ✅ Opérationnel |
-| Affichage de la phrase en cours | ✅ Opérationnel |
-| Indicateur de connexion (LIVE/OFF) | ✅ Opérationnel |
-| Configuration du serveur (persistante) | ✅ Opérationnel |
-| Gestion des événements (pause, kick, messages admin) | ✅ Opérationnel |
-| Thème sombre avec effets visuels | ✅ Opérationnel |
-| Envoi de malus (Game Master) | ✅ Opérationnel (côté app) |
-| Historique des parties (API REST) | 📋 Prévu (modèles prêts) |
+| Connexion WebSocket | Opérationnel |
+| Reconnexion automatique | Opérationnel |
+| Statut de la partie en direct | Opérationnel |
+| Scores en temps réel | Opérationnel |
+| Classement avec podium | Opérationnel |
+| Phrase en cours | Opérationnel |
+| Indicateur de connexion (LIVE/OFF) | Opérationnel |
+| Configuration du serveur persistante | Opérationnel |
+| Gestion des événements (pause, kick, admin) | Opérationnel |
+| Thème sombre | Opérationnel |
+| Envoi de malus (Game Master) | Opérationnel |
+| Historique des parties (API REST) | Prévu — modèles prêts |

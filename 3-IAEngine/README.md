@@ -20,18 +20,17 @@ Le modèle entraîné est sauvegardé dans un fichier `ppo_typing_v1.zip`, prêt
 
 | Fichier | Rôle |
 |---|---|
-| `custom_env.py` | **Environnement Gymnasium** — simule le jeu de frappe pour l'entraînement. Pioche des phrases dans `vocab.py`, gère le curseur et calcule la récompense. |
-| `vocab.py` | **Vocabulaire** — liste de phrases d'entraînement variées (pangrammes, phrases avec accents et majuscules, etc.). |
-| `train_manager.py` | **Script d'entraînement** — lance l'entraînement PPO, affiche les métriques en temps réel (précision, score) et sauvegarde le modèle. |
-| `inference_server.py` | **Serveur d'inférence** — API FastAPI qui charge le modèle et expose un endpoint `/predict` pour que le jeu puisse interroger l'IA. |
-| `rpi_bot_client.py` | **Client Raspberry Pi** — charge le modèle localement et exécute l'inférence directement sur la borne arcade. |
-| `requirements.txt` | Dépendances Python du projet. |
+| `custom_env.py` | Gymnasium simule le jeu pour l'entraînement. Pioche des phrases dans `vocab.py`, gère le curseur et calcule la récompense |
+| `vocab.py` | Liste de phrases d'entraînement |
+| `train_manager.py` | Lance l'entraînement PPO, affiche les métriques (précision, score) et sauvegarde le modèle |
+| `rpi_bot_client.py` | Charge le modèle localement et exécute sur la borne arcade. |
+
 
 Fichiers générés après entraînement :
 
 | Fichier | Rôle |
 |---|---|
-| `ppo_typing_v1.zip` | Le modèle entraîné (poids du réseau de neurones). |
+| `ppo_typing_v1.zip` | Le modèle entraîné. |
 | `training_results.png` | Graphique de progression de l'entraînement. |
 
 ## Comment l'IA a été entraînée
@@ -40,11 +39,12 @@ Fichiers générés après entraînement :
 
 L'environnement suit le standard **Gymnasium** (l'API de référence pour le reinforcement learning en Python). Voici ce qui se passe à chaque épisode :
 
-1. Une **phrase aléatoire** est choisie dans le vocabulaire (`vocab.py`).
-2. L'IA reçoit l'**index de la lettre cible** comme observation (ex : `0` = `a`, `1` = `b`, `26` = espace…).
-3. Elle répond avec un **index de lettre** (son action).
-4. Si c'est la bonne lettre → le curseur avance. Sinon → il reste en place et l'IA est pénalisée.
-5. L'épisode se termine quand la phrase est entièrement tapée.
+- Une phrase est choisie dans le vocabulaire (`vocab.py`).
+- L'IA reçoit l'index de la lettre cible comme observation (ex : `0` = `a`, `1` = `b`, `26` = espace…).
+- Elle répond avec un index de lettre.
+- Si c'est la bonne lettre, récompense et les params bougent. 
+- Mêmes params et l'IA est pénalisée.
+- L'épisode se termine quand la phrase est entièrement tapée.
 
 ### L'algorithme PPO (`train_manager.py`)
 

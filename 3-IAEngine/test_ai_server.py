@@ -6,7 +6,7 @@ import requests
 import json
 
 def test_ai_server():
-    server_url = "http://localhost:8000"
+    server_url = "http://10.109.150.240:8000"
     
     # Test health endpoint
     try:
