@@ -1,0 +1,11 @@
+/venv
+3-IAENGINE/__pycache__/
+3-IAENGINE/*.pyc
+3-IAENGINE/.venv
+
+# Ignore Docker files
+3-IAENGINE/Dockerfile
+3-IAENGINE/docker-compose.yml
+
+
+__pycache__
