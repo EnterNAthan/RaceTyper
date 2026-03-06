@@ -1,3 +1,7 @@
+17/20 bien jouer l'équipe :) <3
+
+
+
 # RaceTyper - Jeu de Course d'Écriture Distribuée
 
 > **Guide de mise en route rapide** : voir [docs/guide-de-jeu.md](docs/guide-de-jeu.md)
