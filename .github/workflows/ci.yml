@@ -14,7 +14,6 @@ jobs:
       run:
         working-directory: 2-ServerArbiter
 
-    # ── PostgreSQL service container pour les tests ──
     services:
       postgres:
         image: postgres:16
@@ -50,9 +49,6 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/ -v
 
-  # ──────────────────────────────────────────────
-  # Console Raspberry - Frontend TypeScript
-  # ──────────────────────────────────────────────
   console-frontend:
     name: Console Raspberry - TypeScript
     runs-on: ubuntu-latest

@@ -15,6 +15,7 @@
 7. [Système Bonus/Malus](#7-système-bonusmalus)
 8. [IA (moteur PPO)](#8-ia-moteur-ppo)
 9. [Déploiement](#9-déploiement)
+10. [Tests (pytest)](#10-tests-pytest)
 
 ---
 
@@ -681,6 +682,127 @@ graph LR
     SRV -- "HTTP /predict" --> IA
     MQTT -- "Subscribeconsole/{id}/malus" --> GPIO
     GPIO -- "RPi.GPIOpin 17/18" --> GPIO
+```
+
+---
+
+## 10. Tests (pytest)
+
+> **Sources :** `2-ServerArbiter/tests/test_main.py`, `3-IAENGINE/test_ai_server.py`, `.github/workflows/ci.yml`
+
+Les tests automatisés du projet sont concentrés sur le **Server Arbitre** et exécutés via `pytest` dans le pipeline CI (avec un service PostgreSQL 16). Le fichier `test_main.py` couvre quatre catégories de tests : unitaires (ObjectManager), intégration WebSocket (cycle de jeu), API REST, et persistance BDD. Les tests BDD sont conditionnels — ils ne s'exécutent que si une connexion PostgreSQL est disponible (CI ou Docker local).
+
+### 10.1 Organisation des suites de tests
+
+```mermaid
+graph TB
+    subgraph "pytest tests/ -v"
+        direction TB
+
+        subgraph UNIT["Tests Unitaires — ObjectManager"]
+            T1["test_bonus_word"]
+            T2["test_malus_word"]
+            T3["test_normal_word"]
+            T4["test_mixed_phrase"]
+            T5["test_out_of_bounds_returns_none"]
+            T6["test_bonus_effect_returns_int"]
+            T7["test_malus_effect_returns_known_effect"]
+        end
+
+        subgraph WS["Tests WebSocket — Connexion & Cycle de jeu"]
+            T8["test_connection_accepted"]
+            T9["test_waiting_status_when_game_not_started"]
+            T10["test_player_update_on_connect"]
+            T11["test_new_phrase_when_game_playing"]
+            T12["test_full_round_cycle"]
+            T13["test_phrase_finished_with_bonus"]
+        end
+
+        subgraph API["Tests API REST"]
+            T14["test_get_scores"]
+            T15["test_get_games"]
+            T16["test_get_players"]
+            T17["test_admin_state"]
+            T18["test_export_stats"]
+        end
+
+        subgraph DB["Tests BDD PostgreSQL (skip si indisponible)"]
+            T19["test_tables_created"]
+            T20["test_phrases_seeded"]
+            T21["test_player_upsert_on_connect"]
+        end
+    end
+```
+
+### 10.2 Dépendances et flux d'exécution
+
+Ce diagramme montre les **dépendances entre les fixtures, le TestClient FastAPI et les composants testés**. Le `TestClient` de Starlette instancie l'application FastAPI sans serveur réel, ce qui permet de tester les endpoints HTTP et WebSocket en mémoire. La fonction `_reset_manager()` remet le `GameManager` dans un état propre avant chaque test WebSocket. Les tests BDD utilisent un moteur SQLAlchemy synchrone (pg8000) injecté via `set_sync_engine()`.
+
+```mermaid
+flowchart LR
+    subgraph "Fixtures & Setup"
+        TC["TestClient(FastAPI)"]
+        RM["_reset_manager()"]
+        SC["setup_class()SQLAlchemy engine"]
+    end
+
+    subgraph "Composants testés"
+        OM["ObjectManager"]
+        GM["GameManager"]
+        APP["FastAPI app(REST + WS)"]
+        PG[("PostgreSQL")]
+    end
+
+    subgraph "Catégories de tests"
+        TU["Tests Unitaires"]
+        TWS["Tests WebSocket"]
+        TAPI["Tests API REST"]
+        TDB["Tests BDD"]
+    end
+
+    TU --> OM
+    TWS --> TC
+    TWS --> RM
+    RM --> GM
+    TC --> APP
+    APP --> GM
+    TAPI --> TC
+    TDB --> SC
+    SC --> PG
+    TDB --> TC
+```
+
+### 10.3 Cycle de vie d'un test WebSocket complet
+
+Ce diagramme de séquence détaille le **test `test_full_round_cycle`**, le test d'intégration le plus complet du projet. Il simule une partie entière avec un seul joueur : connexion, réception de la phrase, envoi du résultat, attente, classement, puis phrase suivante.
+
+```mermaid
+sequenceDiagram
+    participant Test as pytest
+    participant TC as TestClient
+    participant APP as FastAPI app
+    participant GM as GameManager
+
+    Test->>GM: _reset_manager()
+    Test->>GM: game_status = "playing"
+    Test->>TC: websocket_connect("/ws/pi-test")
+    TC->>APP: WS handshake
+
+    APP-->>TC: connection_accepted {client_id: "pi-test"}
+    APP-->>TC: new_phrase {phrase, round: 0}
+    APP-->>TC: player_update {scores}
+
+    Test->>TC: send_json(phrase_finished)
+    TC->>APP: {action: "phrase_finished", time: 8.5, errors: 0}
+
+    APP-->>TC: round_wait {message: "attente..."}
+    Note over GM: 1 seul joueur = manche terminée
+    APP-->>TC: round_classement {classement: [{pi-test, rank:1}]}
+    APP-->>TC: player_update {scores mis à jour}
+    APP-->>TC: new_phrase {phrase, round: 1}
+
+    Test->>Test: assert scores["pi-test"] > 0
+    Test->>Test: assert current_phrase_index == 1
 ```
 
 ---
