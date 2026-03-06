@@ -16,6 +16,19 @@ Concrètement, voici comment ça fonctionne :
 
 Le modèle entraîné est sauvegardé dans un fichier `ppo_typing_v1.zip`, prêt à être utilisé en jeu comme adversaire.
 
+```mermaid
+flowchart LR
+    Env["Environnement custom_env.py  phrase en cours "]
+    Agent["Agent PPO"]
+
+    Env -->|"index lettre cible"| Agent
+    Agent -->|"index lettre choisie"| Env
+    Env -->|"récompense +1 / −1"| Agent
+    Agent -->|"mise à jour des poids"| Agent
+```
+
+Ce cycle se répète **200 000 fois** jusqu'à ce que l'agent converge vers une politique optimale.
+
 ## Structure des fichiers
 
 | Fichier | Rôle |
@@ -45,6 +58,14 @@ L'environnement suit le standard **Gymnasium** (l'API de référence pour le rei
 - Si c'est la bonne lettre, récompense et les params bougent. 
 - Mêmes params et l'IA est pénalisée.
 - L'épisode se termine quand la phrase est entièrement tapée.
+
+| Composant | Type | Valeurs | Description |
+|---|---|---|---|
+| Observation | Discret | 0 – 65 | Index de la lettre à taper (a=0, b=1, …, espace=26, …) |
+| Action | Discret | 0 – 65 | Index de la lettre choisie par l'agent |
+| Récompense correcte | Entier | +1 | La lettre correspond — le curseur avance |
+| Récompense incorrecte | Entier | −1 | La lettre est fausse — le curseur reste en place |
+| Fin d'épisode | Booléen | — | `True` quand toute la phrase a été tapée |
 
 ### L'algorithme PPO (`train_manager.py`)
 

@@ -71,6 +71,18 @@ Les événements ponctuels (feedback malus, messages admin, kick) utilisent `Sha
 
 Un seul `GameViewModel` est partagé via `viewModels()` dans `MainActivity`. La connexion WebSocket reste ainsi active quelle que soit la navigation entre les onglets — cohérent avec un rôle de spectateur où les mises à jour doivent continuer en arrière-plan.
 
+### Coroutines (explication orale)
+
+L'application utilise les coroutines Kotlin pour exécuter les traitements asynchrones sans bloquer l'interface. Concrètement, les messages réseau sont traités en arrière-plan, puis propagés au `ViewModel` via des `Flow`, et l'UI Compose se met à jour automatiquement.
+
+```mermaid
+flowchart LR
+    WS[WebSocket] --> C[Coroutine]
+    C --> F[StateFlow SharedFlow]
+    F --> VM[GameViewModel]
+    VM --> UI[Compose UI]
+```
+
 ## Architecture
 
 ```mermaid
