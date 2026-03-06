@@ -45,42 +45,42 @@ Ce diagramme représente la **vue macro du système distribué**. Le cœur est l
 ```mermaid
 graph TB
     subgraph "Raspberry Pi 1..N"
-        FE["Frontend React\n(port 5173)"]
-        GPIO["GPIO Service\n(port 5001)\nFastAPI"]
-        SIREN["Sirène / LED\nGPIO pins 17-18"]
-        FE -- "HTTP POST /siren_on\n/led_on" --> GPIO
+        FE["Frontend React(port 5173)"]
+        GPIO["GPIO Service(port 5001)FastAPI"]
+        SIREN["Sirène / LEDGPIO pins 17-18"]
+        FE -- "HTTP POST /siren_on/led_on" --> GPIO
         GPIO -- "RPi.GPIO" --> SIREN
     end
 
     subgraph "Serveur Central"
-        SRV["Server Arbitre\nFastAPI (port 8080)"]
-        GM["GameManager\n(logique de jeu)"]
-        OM["ObjectManager\n(bonus/malus)"]
-        DB[("PostgreSQL\n(port 5434)")]
-        MQTT_B["MQTT Bridge\n(paho-mqtt)"]
+        SRV["Server ArbitreFastAPI (port 8080)"]
+        GM["GameManager(logique de jeu)"]
+        OM["ObjectManager(bonus/malus)"]
+        DB[("PostgreSQL(port 5434)")]
+        MQTT_B["MQTT Bridge(paho-mqtt)"]
         SRV --> GM
         SRV --> OM
         GM --> DB
     end
 
     subgraph "Broker MQTT"
-        BROKER["MQTT Broker\n(port 1883)"]
+        BROKER["MQTT Broker(port 1883)"]
     end
 
     subgraph "IA Engine"
-        IA["Inference Server\nPPO Model\n(port 8000)"]
+        IA["Inference ServerPPO Model(port 8000)"]
     end
 
     subgraph "Mobile (Android)"
-        APP["App Kotlin\nJetpack Compose"]
+        APP["App KotlinJetpack Compose"]
     end
 
-    FE -- "WebSocket\n/ws/{client_id}" --> SRV
-    APP -- "WebSocket\n/ws/mobile-1" --> SRV
-    MQTT_B -- "MQTT publish\nracetyper/game/..." --> BROKER
+    FE -- "WebSocket/ws/{client_id}" --> SRV
+    APP -- "WebSocket/ws/mobile-1" --> SRV
+    MQTT_B -- "MQTT publishracetyper/game/..." --> BROKER
     BROKER -- "MQTT subscribe" --> GPIO
     GM -- "HTTP predict" --> IA
-    SRV -- "Admin WS\n/ws/admin-dashboard" --> SRV
+    SRV -- "Admin WS/ws/admin-dashboard" --> SRV
 ```
 
 ---
@@ -155,21 +155,21 @@ Ce diagramme montre l'**architecture React du frontend** tournant sur chaque Ras
 
 ```mermaid
 graph TD
-    APP["App.tsx\n(état global)"]
+    APP["App.tsx(état global)"]
 
-    APP --> USC["useServerConnection\n(WebSocket)"]
-    APP --> UTG["useTypingGame\n(logique frappe)"]
-    APP --> UAI["useAIOpponent\n(IA locale)"]
-    APP --> UAF["useArcadeEffects\n(audio)"]
-    APP --> UKM["useKioskMode\n(plein écran)"]
+    APP --> USC["useServerConnection(WebSocket)"]
+    APP --> UTG["useTypingGame(logique frappe)"]
+    APP --> UAI["useAIOpponent(IA locale)"]
+    APP --> UAF["useArcadeEffects(audio)"]
+    APP --> UKM["useKioskMode(plein écran)"]
 
-    APP --> TD["TypingDisplay\n(affichage phrase)"]
-    APP --> PB["ProgressBar\n(progression)"]
-    APP --> GS["GameStats\n(stats frappe)"]
-    APP --> MO["MalusOverlay\n(effets malus UI)"]
+    APP --> TD["TypingDisplay(affichage phrase)"]
+    APP --> PB["ProgressBar(progression)"]
+    APP --> GS["GameStats(stats frappe)"]
+    APP --> MO["MalusOverlay(effets malus UI)"]
 
-    USC -- "new_phrase\ngame_over\nplayer_update\nround_classement\nmalus_effect" --> APP
-    UTG -- "phrase_finished\n{time, errors, objects}" --> USC
+    USC -- "new_phrasegame_overplayer_updateround_classementmalus_effect" --> APP
+    UTG -- "phrase_finished{time, errors, objects}" --> USC
 ```
 
 ### 3.3 Application Mobile (`4-MobileApp/`)
@@ -180,18 +180,18 @@ Ce diagramme représente l'**architecture MVVM de l'application Android**. L'ent
 
 ```mermaid
 graph TD
-    MA["MainActivity"] --> NG["NavGraph\n(navigation)"]
-    NG --> HS["HomeScreen\n(status + top 3)"]
-    NG --> RS["RankingsScreen\n(classement)"]
+    MA["MainActivity"] --> NG["NavGraph(navigation)"]
+    NG --> HS["HomeScreen(status + top 3)"]
+    NG --> RS["RankingsScreen(classement)"]
     NG --> FS["FriendsScreen"]
-    NG --> SS["SettingsScreen\n(URL serveur)"]
+    NG --> SS["SettingsScreen(URL serveur)"]
 
-    GVM["GameViewModel\n(StateFlow)"] --> HS
+    GVM["GameViewModel(StateFlow)"] --> HS
     GVM --> RS
 
     GR["GameRepository"] --> GVM
-    WS["RaceTyperWebSocket\n(OkHttp)"] --> GR
-    SM["SettingsManager\n(DataStore)"] --> WS
+    WS["RaceTyperWebSocket(OkHttp)"] --> GR
+    SM["SettingsManager(DataStore)"] --> WS
 ```
 
 ### 3.4 GPIO Service (`1-ConsoleRasberry/gpio-service/`)
@@ -232,15 +232,15 @@ Ce diagramme liste tous les **types de messages que le serveur envoie aux client
 graph LR
     SRV["Serveur"]
 
-    SRV -- "connection_accepted\n{client_id}" --> C1
-    SRV -- "game_status\n{status}" --> C1
-    SRV -- "new_phrase\n{phrase, round}" --> C1
-    SRV -- "player_update\n{scores}" --> C1
-    SRV -- "round_wait\n{message}" --> C1
-    SRV -- "round_classement\n{classement, global_scores}" --> C1
-    SRV -- "game_over\n{final_rankings}" --> C1
+    SRV -- "connection_accepted{client_id}" --> C1
+    SRV -- "game_status{status}" --> C1
+    SRV -- "new_phrase{phrase, round}" --> C1
+    SRV -- "player_update{scores}" --> C1
+    SRV -- "round_wait{message}" --> C1
+    SRV -- "round_classement{classement, global_scores}" --> C1
+    SRV -- "game_over{final_rankings}" --> C1
 
-    C1["Client\n(Pi / Mobile)"]
+    C1["Client(Pi / Mobile)"]
 ```
 
 ### 4.2 WebSocket — Messages Client → Serveur
@@ -287,7 +287,7 @@ stateDiagram-v2
     playing --> paused : Admin → pause_game
     paused --> playing : Admin → resume_game
     playing --> round_wait : Joueur envoie phrase_finished
-    round_wait --> round_classement : Tous les joueurs ont terminé\n(ou timeout)
+    round_wait --> round_classement : Tous les joueurs ont terminé(ou timeout)
     round_classement --> playing : Round suivant (auto 3s)
     round_classement --> game_over : 5 rounds terminés
     game_over --> waiting : Admin → reset_game
@@ -338,26 +338,36 @@ Ce diagramme simplifie le **système de scoring à trois composantes**. Le score
 
 ```mermaid
 graph LR
-    F["phrase_finished\n{time, errors}"] --> CALC
+    F["phrase_finished{time, errors}"] --> CALC
 
     subgraph CALC["Calcul du Score"]
-        B["Score base\n1er: 800pts\n2ème: 700pts\n..."]
-        BO["Bonus\n+100 par mot ^bonus^"]
-        P["Pénalités\n-pts par erreur"]
+        B["Score base1er: 800pts2ème: 700pts..."]
+        BO["Bonus+100 par mot ^bonus^"]
+        P["Pénalités-pts par erreur"]
     end
 
-    CALC --> S["Score final\najouté au total"]
+    CALC --> S["Score finalajouté au total"]
 ```
 
 ---
 
 ## 6. Base de données
 
+### Fiche technique (diapo)
+
+- **SGBD** : PostgreSQL 16 conteneurisé (Docker, port 5434)
+- **ORM** : SQLAlchemy 2.x (async + sync) — modèles dans `models_db.py`
+- **5 tables** :
+  - `Player` — identifie chaque console (client_id unique, ex: `pi-1`)
+  - `Game` — une session de jeu (statut, timestamps, nombre de rounds)
+  - `Phrase` — les phrases a taper, ordonnees par position
+  - `GamePlayer` — liaison Game-Player avec score final et classement
+  - `RoundResult` — granularite la plus fine : temps, erreurs, score et objets par joueur par round (JSONB)
+- **Persistance** : volume Docker `pgdata`, donnees conservees entre les redemarrages
+
 ### 6.1 Schéma entité-relation
 
-> **Sources :** `2-ServerArbiter/server_app/models_db.py` (modèles SQLAlchemy ORM), `database.py` (création des tables via `init_db()`), `tests/test_main.py` (tests de persistance)
-
-Ce diagramme ERD représente les **5 tables du schéma PostgreSQL** tel que défini dans `models_db.py` avec SQLAlchemy. `Player` identifie chaque console par son `client_id` (ex: `pi-1`) et est créé ou mis à jour à chaque connexion (upsert). `Game` est une session de jeu complète avec son statut et ses timestamps. `Phrase` contient les phrases à taper, ordonnées par `position`. `GamePlayer` est la table de liaison many-to-many entre `Game` et `Player`, avec le score final et le rang. `RoundResult` est la table la plus granulaire : un enregistrement par joueur par round, stockant le temps, les erreurs, le score ajouté et les objets bonus/malus déclenchés en JSONB. C'est depuis `RoundResult` que l'on peut reconstruire l'historique complet d'une partie.
+ **Sources :** `2-ServerArbiter/server_app/models_db.py` (modèles SQLAlchemy ORM), `database.py` (création des tables via `init_db()`), `tests/test_main.py` (tests de persistance)
 
 ```mermaid
 erDiagram
@@ -413,16 +423,16 @@ erDiagram
 
 ### 6.2 Connexion (dual-mode)
 
-> **Sources :** `2-ServerArbiter/server_app/database.py`, `requirements.txt` (présence des deux drivers : `asyncpg` et `pg8000`), `.env.example`
+ **Sources :** `2-ServerArbiter/server_app/database.py`, `requirements.txt` (présence des deux drivers : `asyncpg` et `pg8000`), `.env.example`
 
 Ce flowchart documente une **décision de robustesse** présente dans `database.py` : le serveur tente d'abord une connexion via `asyncpg` (driver natif C, performant, requis pour les opérations async). Si `asyncpg` lève une `UnicodeDecodeError` — bug connu sous Windows avec certaines configurations système — il bascule automatiquement sur `pg8000`, un driver PostgreSQL écrit en Python pur qui contourne ce problème. Si les deux échouent, la logique retry tente jusqu'à 5 fois avec un délai de 2 secondes entre chaque essai. Ce mécanisme explique la présence des deux drivers dans `requirements.txt` et le port 5434 (non standard) dans `.env.example` pour éviter les conflits avec une instance PostgreSQL locale.
 
 ```mermaid
 flowchart TD
     START["Connexion DB demandée"]
-    TRY_ASYNC["Essai asyncpg\n(driver async natif)"]
-    TRY_SYNC["Fallback pg8000\n(pure Python)"]
-    RETRY["Retry × 5\n(délai 2s)"]
+    TRY_ASYNC["Essai asyncpg(driver async natif)"]
+    TRY_SYNC["Fallback pg8000(pure Python)"]
+    RETRY["Retry × 5(délai 2s)"]
     OK["Connexion établie"]
     FAIL["Échec"]
 
@@ -458,7 +468,7 @@ Ce flowchart montre le **pipeline complet d'un mot spécial**, de sa détection 
 ```mermaid
 flowchart TD
     PHRASE["Phrase reçue par le joueur"]
-    OM["ObjectManager\nparse les marqueurs"]
+    OM["ObjectManagerparse les marqueurs"]
 
     PHRASE --> OM
 
@@ -466,22 +476,22 @@ flowchart TD
     OM -- "&word& détecté" --> MALUS
 
     subgraph BONUS["Effet Bonus"]
-        B1["Mot en arc-en-ciel\n(TypingDisplay)"]
+        B1["Mot en arc-en-ciel(TypingDisplay)"]
         B2["+100 points"]
     end
 
     subgraph MALUS["Effet Malus"]
-        M1["TRIGGER_SIREN\n→ MQTT → GPIO sirène"]
-        M2["SCREEN_SHAKE\n→ animation CSS"]
-        M3["SLEEP\n→ pause temporaire"]
-        M4["SWAPKEY\n→ échange de touches"]
-        M5["intrusive_gif\n→ overlay GIF 3s"]
-        M6["disable_keyboard\n→ clavier désactivé"]
+        M1["TRIGGER_SIREN→ MQTT → GPIO sirène"]
+        M2["SCREEN_SHAKE→ animation CSS"]
+        M3["SLEEP→ pause temporaire"]
+        M4["SWAPKEY→ échange de touches"]
+        M5["intrusive_gif→ overlay GIF 3s"]
+        M6["disable_keyboard→ clavier désactivé"]
     end
 
     BONUS --> SRV_SCORE["Serveur : ajout score"]
-    M1 --> MQTT_PUB["MQTT publish\nracetyper/game/console/{id}/malus"]
-    M2 --> WS_MALUS["WebSocket → Frontend\neffet visuel"]
+    M1 --> MQTT_PUB["MQTT publishracetyper/game/console/{id}/malus"]
+    M2 --> WS_MALUS["WebSocket → Frontendeffet visuel"]
     M3 --> WS_MALUS
     M4 --> WS_MALUS
     M5 --> WS_MALUS
@@ -501,10 +511,10 @@ Ce diagramme distingue les **deux modes d'IA** dans le projet. La voie offline :
 ```mermaid
 graph TB
     subgraph "Entraînement (offline)"
-        ENV["TypingGameEnv\n(Gymnasium)\nObs: char index\nAction: char prédit"]
-        PPO["Algorithme PPO\n(Stable Baselines3)"]
-        CB["Callback custom\n(métriques, graphs)"]
-        MODEL["ppo_typing_v1.zip\n(modèle sauvegardé)"]
+        ENV["TypingGameEnv(Gymnasium)Obs: char indexAction: char prédit"]
+        PPO["Algorithme PPO(Stable Baselines3)"]
+        CB["Callback custom(métriques, graphs)"]
+        MODEL["ppo_typing_v1.zip(modèle sauvegardé)"]
 
         ENV --> PPO
         PPO --> CB
@@ -512,17 +522,17 @@ graph TB
     end
 
     subgraph "Inférence (runtime)"
-        IS["Inference Server\nFastAPI (port 8000)"]
+        IS["Inference ServerFastAPI (port 8000)"]
         MODEL --> IS
     end
 
     subgraph "Intégration jeu"
         GM["GameManager"]
-        UAI["useAIOpponent\n(frontend)"]
+        UAI["useAIOpponent(frontend)"]
     end
 
-    IS -- "POST /predict\n{obs} → {action, char}" --> GM
-    UAI -- "IA locale\n(difficultés: beginner→impossible)" --> UAI
+    IS -- "POST /predict{obs} → {action, char}" --> GM
+    UAI -- "IA locale(difficultés: beginner→impossible)" --> UAI
 ```
 
 ### 8.2 Niveaux de difficulté (IA locale)
@@ -548,22 +558,22 @@ Ce diagramme représente l'**infrastructure réseau LAN** attendue en conditions
 ```mermaid
 graph TB
     subgraph "Réseau local (LAN)"
-        R["Routeur\n192.168.1.x"]
+        R["Routeur192.168.1.x"]
 
         subgraph "Serveur central"
-            SRV["Server Arbitre\n:8080"]
-            PG["PostgreSQL\n:5434"]
-            MQ["MQTT Broker\n:1883"]
+            SRV["Server Arbitre:8080"]
+            PG["PostgreSQL:5434"]
+            MQ["MQTT Broker:1883"]
         end
 
         subgraph "Raspberry Pi 1"
-            FE1["Frontend\n:5173"]
-            GP1["GPIO Svc\n:5001"]
+            FE1["Frontend:5173"]
+            GP1["GPIO Svc:5001"]
         end
 
         subgraph "Raspberry Pi 2..N"
-            FE2["Frontend\n:5173"]
-            GP2["GPIO Svc\n:5001"]
+            FE2["Frontend:5173"]
+            GP2["GPIO Svc:5001"]
         end
 
         subgraph "Mobile"
@@ -593,34 +603,56 @@ Ce diagramme montre la **composition Docker du serveur**. Deux services sont dé
 ```mermaid
 graph LR
     subgraph "docker-compose.yml"
-        DB["postgres:16\nport: 5434:5432\nvolume: pgdata"]
-        APP["fastapi app\nport: 8080:8080\ndepends_on: db"]
+        DB["postgres:16port: 5434:5432volume: pgdata"]
+        APP["fastapi appport: 8080:8080depends_on: db"]
         DB --> APP
     end
 ```
 
-### 9.3 CI/CD Pipeline
+### 9.3 Pipeline CI (GitHub Actions)
 
-> **Sources :** `.github/workflows/ci.yml`, `2-ServerArbiter/tests/test_main.py`, `1-ConsoleRasberry/typing-game-frontend/tsconfig.json`, `package.json`
+> **Sources :** `.github/workflows/ci.yml`
 
-Ce flowchart représente le **pipeline GitHub Actions** déclenché à chaque `git push`. Les trois jobs s'exécutent en parallèle et sont indépendants. Le job **Server Arbitre** est le plus complet : il démarre un conteneur PostgreSQL 16 en service GitHub Actions (port 5432), installe les dépendances Python et lance `pytest` sur `tests/test_main.py` — ce test couvre la connexion DB, les WebSockets, les routes REST et le cycle de jeu complet. Le job **Console Frontend** exécute `tsc --noEmit` (vérification des types TypeScript sans émission de fichiers) puis `vite build` pour valider que le bundle de production se génère correctement. Le job **GPIO Service** se limite à une vérification syntaxique Python avec `py_compile` car le code GPIO ne peut pas être testé sans matériel Raspberry Pi.
+Le pipeline CI est déclenché automatiquement à chaque `push` ou `pull_request` sur `main`. Trois jobs indépendants s'exécutent en parallèle.
 
 ```mermaid
 flowchart TD
-    PUSH["git push → GitHub"]
+    DEV["Commit & Push sur main"] --> TRIGGER["GitHub Actions"]
 
-    PUSH --> J1["Job: Server Arbitre\nPython 3.10\n+ PostgreSQL 16"]
-    PUSH --> J2["Job: Console Frontend\nNode 20"]
-    PUSH --> J3["Job: GPIO Service\nPython 3.10"]
+    TRIGGER --> J1["Server Arbitre"]
+    TRIGGER --> J2["Console Frontend"]
+    TRIGGER --> J3["GPIO Service"]
 
-    J1 --> S1["pip install\npytest tests/ -v\n(DB + WebSocket + API)"]
-    J2 --> S2["npm install\ntsc --noEmit\nvite build"]
-    J3 --> S3["python -m py_compile\n(syntax check)"]
+    J1 --> S1A["PostgreSQL 16 + pip install"]
+    S1A --> S1B["py_compile"]
+    S1B --> S1C["pytest tests/ -v"]
 
-    S1 --> OK["CI Pass"]
-    S2 --> OK
-    S3 --> OK
+    J2 --> S2A["npm ci"]
+    S2A --> S2B["tsc --noEmit"]
+    S2B --> S2C["vite build"]
+
+    J3 --> S3A["pip install fastapi uvicorn"]
+    S3A --> S3B["py_compile main.py"]
+
+    S1C --> GATE{"CI"}
+    S2C --> GATE
+    S3B --> GATE
+
+    GATE -- "OK" --> PASS["Merge autorisé"]
+    GATE -- "Echec" --> FAIL["Merge bloqué"]
 ```
+
+### 9.4 Améliorations CD envisagées
+
+Les évolutions suivantes ont été identifiées mais **non implémentées** dans le cadre de la SAE :
+
+| Etape | Description | Statut |
+|-------|-------------|--------|
+| Docker Build auto | Build et push des images Docker vers un registry (GHCR) après CI pass | Non implémenté |
+| Déploiement Kubernetes | `kubectl apply` automatique sur un cluster K8s pour orchestrer les pods (serveur, BDD, MQTT, IA) | Non implémenté |
+| Rollback automatique | Retour à la version précédente si le healthcheck échoue après déploiement | Non implémenté |
+| Tests d'intégration E2E | Tests end-to-end simulant une partie complète (multi-joueurs + IA + MQTT) | Non implémenté |
+| Notifications Slack/Discord | Alertes automatiques en cas d'échec du pipeline | Non implémenté |
 
 ---
 
@@ -632,23 +664,23 @@ Ce diagramme est la **carte de navigation globale** du projet. Il montre que le 
 
 ```mermaid
 graph LR
-    ADMIN["Admin\n(navigateur)"]
-    PI["Raspberry Pi\n(1 à N)"]
+    ADMIN["Admin(navigateur)"]
+    PI["Raspberry Pi(1 à N)"]
     MOB["Mobile Android"]
-    SRV["Server Arbitre\n:8080"]
-    DB[("PostgreSQL\n:5434")]
-    MQTT["MQTT Broker\n:1883"]
-    GPIO["GPIO Service\n:5001"]
-    IA["IA Engine\n:8000"]
+    SRV["Server Arbitre:8080"]
+    DB[("PostgreSQL:5434")]
+    MQTT["MQTT Broker:1883"]
+    GPIO["GPIO Service:5001"]
+    IA["IA Engine:8000"]
 
-    ADMIN -- "WS /ws/admin-dashboard\nCommandes admin" --> SRV
-    PI -- "WS /ws/{client_id}\nFrappe + résultats" --> SRV
-    MOB -- "WS /ws/mobile-1\nLecture scores" --> SRV
+    ADMIN -- "WS /ws/admin-dashboardCommandes admin" --> SRV
+    PI -- "WS /ws/{client_id}Frappe + résultats" --> SRV
+    MOB -- "WS /ws/mobile-1Lecture scores" --> SRV
     SRV -- "SQL async/sync" --> DB
-    SRV -- "MQTT publish\nmalus ciblé" --> MQTT
+    SRV -- "MQTT publishmalus ciblé" --> MQTT
     SRV -- "HTTP /predict" --> IA
-    MQTT -- "Subscribe\nconsole/{id}/malus" --> GPIO
-    GPIO -- "RPi.GPIO\npin 17/18" --> GPIO
+    MQTT -- "Subscribeconsole/{id}/malus" --> GPIO
+    GPIO -- "RPi.GPIOpin 17/18" --> GPIO
 ```
 
 ---
